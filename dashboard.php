@@ -94,6 +94,7 @@ if (!isset($_SESSION["user_id"])) {
       </div>
     </section>
   </main>
+  <div class="toast-container position-fixed top-0 end-0 p-3" id="toastBox" style="margin-top: 60px;"></div>
 <div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalTitle" aria-hidden="true">
   <div class="modal-dialog">
     <form id="editForm" class="modal-content">

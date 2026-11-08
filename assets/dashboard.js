@@ -7,8 +7,18 @@ const esc = (s) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const notify = (message, type = "success") => {
-  document.getElementById("alert").innerHTML =
-    `<div class="alert alert-${type}">${esc(message)}</div>`;
+  const box = document.getElementById("toastBox");
+  const el = document.createElement("div");
+  el.className = `toast align-items-center text-bg-${type} border-0`;
+  el.setAttribute("role", "alert");
+  el.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${esc(message)}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>`;
+  box.appendChild(el);
+  el.addEventListener("hidden.bs.toast", () => el.remove());
+  new bootstrap.Toast(el, { delay: 4000 }).show();
 };
 
 const request = async (method, body) => {
@@ -176,6 +186,10 @@ const checkDueSoon = () => {
       .map((t) => `${esc(t.title)} (${daysLeft(t.due_date) === 0 ? "today" : `in ${daysLeft(t.due_date)} day(s)`})`)
       .join(", ")}</div>`;
   document.getElementById("dueAlerts").innerHTML = html;
+  if ((overdue.length || soon.length) && !sessionStorage.getItem("toasted")) {
+  notify(`${overdue.length} overdue, ${soon.length} due soon. Check your list!`, overdue.length ? "danger" : "warning");
+  sessionStorage.setItem("toasted", "1");
+}
 
   if ("Notification" in window && Notification.permission === "granted" &&
       (overdue.length || soon.length) && !sessionStorage.getItem("notified")) {
