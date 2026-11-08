@@ -109,3 +109,17 @@ document.getElementById("search").addEventListener("input", render);
 document.getElementById("statusFilter").addEventListener("change", render);
 
 loadTasks();
+
+// Dark/light mode saved with localStorage
+const toggle = document.getElementById("themeToggle");
+const applyTheme = (theme) => {
+  document.documentElement.setAttribute("data-bs-theme", theme);
+  toggle.textContent = theme === "dark" ? "☀ Light" : "🌙 Dark";
+};
+applyTheme(localStorage.getItem("theme") || "light");
+
+toggle.addEventListener("click", () => {
+  const next = document.documentElement.getAttribute("data-bs-theme") === "dark" ? "light" : "dark";
+  localStorage.setItem("theme", next);
+  applyTheme(next);
+});

@@ -14,16 +14,17 @@ if (!isset($_SESSION["user_id"])) {
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/style.css" rel="stylesheet">
 </head>
-<body class="bg-light">
-  <nav class="navbar bg-white shadow-sm">
-    <div class="container">
-      <span class="navbar-brand fw-bold">Due It Now</span>
-      <span>
-        Hi, <?= htmlspecialchars($_SESSION["full_name"]) ?>
-        <a href="api/logout.php" class="btn btn-outline-danger btn-sm ms-2">Log out</a>
-      </span>
-    </div>
-  </nav>
+<body class="bg-body-tertiary">
+  <nav class="navbar bg-body shadow-sm">
+  <div class="container">
+    <span class="navbar-brand fw-bold">Due It Now</span>
+    <span>
+      Hi, <?= htmlspecialchars($_SESSION["full_name"]) ?>
+      <button id="themeToggle" class="btn btn-outline-secondary btn-sm ms-2" type="button">🌙 Dark</button>
+      <a href="api/logout.php" class="btn btn-outline-danger btn-sm ms-2">Log out</a>
+    </span>
+  </div>
+</nav>
 
   <main class="container py-4">
     <div id="alert" role="alert"></div>
