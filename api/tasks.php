@@ -13,7 +13,7 @@ $method = $_SERVER["REQUEST_METHOD"];
 
 // READ
 if ($method === "GET") {
-    $stmt = $conn->prepare("SELECT id, title, description, category, priority, due_date, due_time, status FROM tasks WHERE user_id = ? ORDER BY due_date ASC, due_time ASC");
+   $stmt = $conn->prepare("SELECT id, title, description, category, priority, due_date, due_time, status, completed_at FROM tasks WHERE user_id = ? ORDER BY due_date ASC, due_time ASC");
     $stmt->bind_param("i", $uid);
     $stmt->execute();
     echo json_encode(["success" => true, "tasks" => $stmt->get_result()->fetch_all(MYSQLI_ASSOC)]);
@@ -58,8 +58,8 @@ if ($method === "PUT") {
         exit;
     }
     $st = ($data["status"] ?? "") === "completed" ? "completed" : "pending";
-    $stmt = $conn->prepare("UPDATE tasks SET title=?, description=?, category=?, priority=?, due_date=?, due_time=?, status=? WHERE id=? AND user_id=?");
-    $stmt->bind_param("sssssssii", $t["title"], $t["desc"], $t["cat"], $t["pri"], $t["due"], $t["time"], $st, $id, $uid);
+    $stmt = $conn->prepare("UPDATE tasks SET title=?, description=?, category=?, priority=?, due_date=?, due_time=?, status=?, completed_at = IF(?='completed', COALESCE(completed_at, NOW()), NULL) WHERE id=? AND user_id=?");
+$stmt->bind_param("ssssssssii", $t["title"], $t["desc"], $t["cat"], $t["pri"], $t["due"], $t["time"], $st, $st, $id, $uid);
     $stmt->execute();
     echo json_encode(["success" => true, "message" => "Task updated."]);
     exit;

@@ -1,29 +1,62 @@
 const API = "api/tasks.php";
-let tasks = [];
+const PROFILE_API = "api/profile.php";
+const $ = (id) => document.getElementById(id);
 
-// Escape text so user input can't inject HTML (XSS protection)
+let tasks = [];
+let firstLoad = true;
+const alerted = new Set();
+
+/* ---------- helpers ---------- */
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+const pad = (n) => String(n).padStart(2, "0");
+const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const stamp = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+const dstamp = (d) => stamp(d).slice(0, 8);
+const startOfToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+const deadline = (t) => new Date(`${t.due_date}T${(t.due_time || "23:59").slice(0, 5)}`);
+const hoursLeft = (t) => (deadline(t) - new Date()) / 36e5;
+const dayDiff = (t) => Math.round((new Date(`${t.due_date}T00:00:00`) - startOfToday()) / 864e5);
+const isOverdue = (t) => t.status === "pending" && t.due_date && hoursLeft(t) < 0;
+const currentView = () => location.hash.slice(1) || "overview";
+const getLead = () => Number(localStorage.getItem("leadHours")) || 48;
+const initialsOf = (name) => {
+  const p = name.trim().split(/\s+/);
+  return ((p[0]?.[0] || "") + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase();
+};
+
+const fmtDue = (d, t) => {
+  if (!d) return "—";
+  const date = new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const time = t ? new Date(`1970-01-01T${t}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+  return time ? `${date}, ${time}` : date;
+};
+
+const fmtLeft = (h) => {
+  const a = Math.abs(h);
+  const span = a < 1 ? `${Math.max(1, Math.round(a * 60))} min` : a < 24 ? `${Math.round(a)} hr` : `${Math.round(a / 24)} day(s)`;
+  return h < 0 ? `Overdue by ${span}` : `Due in ${span}`;
+};
+
 const notify = (message, type = "success") => {
-  const box = document.getElementById("toastBox");
   const el = document.createElement("div");
   el.className = `toast align-items-center text-bg-${type} border-0`;
   el.setAttribute("role", "alert");
   el.innerHTML = `
     <div class="d-flex">
       <div class="toast-body">${esc(message)}</div>
-      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
     </div>`;
-  box.appendChild(el);
+  $("toastBox").appendChild(el);
   el.addEventListener("hidden.bs.toast", () => el.remove());
   new bootstrap.Toast(el, { delay: 4000 }).show();
 };
 
-const request = async (method, body) => {
+const call = async (url, method = "GET", body) => {
   try {
-    const res = await fetch(API, {
+    const res = await fetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
@@ -34,23 +67,32 @@ const request = async (method, body) => {
     return { success: false, message: "Unable to connect to the server." };
   }
 };
+const request = (method, body) => call(API, method, body);
 
-const fmtDue = (d, t) => {
-  if (!d) return "—";
-  const date = new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const time = t ? new Date(`1970-01-01T${t}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
-  return time ? `${date}, ${time}` : date;
+/* ---------- views (sidebar pages) ---------- */
+const VIEWS = ["overview", "add", "tasks", "insights", "calendar", "profile", "settings"];
+
+const showView = (name) => {
+  if (!VIEWS.includes(name)) name = "overview";
+  document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${name}`));
+  document.querySelectorAll("[data-view]").forEach((a) => a.classList.toggle("active", a.dataset.view === name));
+  if (name === "insights") renderInsights();
+  if (name === "calendar") renderCalendar();
+  if (name === "profile") loadProfile();
+  window.scrollTo(0, 0);
 };
+window.addEventListener("hashchange", () => showView(currentView()));
 
+/* ---------- task list (My tasks) ---------- */
 const render = () => {
-  const term = document.getElementById("search").value.toLowerCase();
-  const status = document.getElementById("statusFilter").value;
+  const term = $("search").value.toLowerCase();
+  const status = $("statusFilter").value;
 
   const visible = tasks.filter(({ title, category, description, status: st }) =>
     (status === "all" || st === status) &&
     `${title} ${category} ${description}`.toLowerCase().includes(term));
 
-  document.getElementById("taskBody").innerHTML = visible.length
+  $("taskBody").innerHTML = visible.length
     ? visible.map(({ id, title, category, description, priority, due_date, due_time, status: st }) => `
       <div class="task ${st === "completed" ? "is-done" : ""}">
         <span class="dot dot-${st === "completed" ? "done" : esc(priority)}"></span>
@@ -72,137 +114,246 @@ const render = () => {
     : `<div class="empty"><i class="bi bi-inbox"></i><p>No tasks found.</p></div>`;
 
   const done = tasks.filter((t) => t.status === "completed").length;
-  document.getElementById("countDone").textContent = done;
-  document.getElementById("countPending").textContent = tasks.length - done;
-  document.getElementById("countTotal").textContent = tasks.length;
+  $("countDone").textContent = done;
+  $("countPending").textContent = tasks.length - done;
+  $("countOverdue").textContent = tasks.filter(isOverdue).length;
+  $("countTotal").textContent = tasks.length;
 };
 
-const loadTasks = async () => {
-  const result = await request("GET");
-  if (result.success) {
-    tasks = result.tasks;
-    render();
-    checkDueSoon();
-    if (firstLoad) {
-      firstLoad = false;
-      deadlinePopups();
-    }
+/* ---------- upcoming deadlines (Overview + Calendar) ---------- */
+const renderUpcoming = () => {
+  const pending = tasks.filter((t) => t.status === "pending" && t.due_date);
+  const groups = [
+    ["Overdue", pending.filter((t) => hoursLeft(t) < 0), "high"],
+    ["Due today", pending.filter((t) => hoursLeft(t) >= 0 && dayDiff(t) === 0), "medium"],
+    ["Due tomorrow", pending.filter((t) => dayDiff(t) === 1), "pending"],
+    ["Due this week", pending.filter((t) => dayDiff(t) >= 2 && dayDiff(t) <= 7), "pending"],
+  ];
+  const html = groups.map(([label, list, tone]) => `
+    <div class="up-group">
+      <div class="up-head"><span>${label}</span><span class="pill pill-${tone}">${list.length}</span></div>
+      ${list.length
+        ? list.sort((a, b) => deadline(a) - deadline(b)).map((t) => `
+          <div class="up-item">
+            <i class="dot dot-${esc(t.priority)}"></i>
+            <span class="up-title">${esc(t.title)}</span>
+            <span class="up-when">${esc(fmtDue(t.due_date, t.due_time))}</span>
+          </div>`).join("")
+        : `<div class="up-empty">Nothing here</div>`}
+    </div>`).join("");
+  document.querySelectorAll(".upcoming-box").forEach((box) => (box.innerHTML = html));
+};
+
+/* ---------- calendar ---------- */
+let calMonth = new Date(); calMonth.setDate(1);
+let calSelected = ymd(new Date());
+let calFilter = "all";
+const matchesFilter = (t) => calFilter === "all" || (t.category || "").toLowerCase().includes(calFilter);
+
+const gcalLink = (t) => {
+  let dates;
+  if (t.due_time) {
+    const s = deadline(t);
+    dates = `${stamp(s)}/${stamp(new Date(s.getTime() + 36e5))}`;
   } else {
-    notify(result.message, "danger");
+    const s = new Date(`${t.due_date}T00:00:00`);
+    dates = `${dstamp(s)}/${dstamp(new Date(s.getTime() + 864e5))}`;
   }
+  const p = new URLSearchParams({ action: "TEMPLATE", text: t.title, details: `${t.description || ""}\n(Due It Now)`, dates });
+  return `https://calendar.google.com/calendar/render?${p}`;
 };
 
-// CREATE
-document.getElementById("taskForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const form = e.target;
-  const result = await request("POST", {
-    title: document.getElementById("title").value,
-    category: document.getElementById("category").value,
-    priority: document.getElementById("priority").value,
-    due_date: document.getElementById("due_date").value,
-        due_time: document.getElementById("due_time").value,
-    description: document.getElementById("description").value,
+const renderDayPanel = () => {
+  const list = tasks.filter((t) => t.due_date === calSelected && matchesFilter(t));
+  const label = new Date(`${calSelected}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  $("dayPanel").innerHTML = `<h3 class="h6 mb-2">${label}</h3>` + (list.length
+    ? list.map((t) => `
+      <div class="day-task">
+        <i class="dot dot-${t.status === "completed" ? "done" : esc(t.priority)}"></i>
+        <div class="task-main">
+          <div class="task-title">${esc(t.title)}</div>
+          <div class="task-sub">${esc(fmtDue(t.due_date, t.due_time))} · ${esc(t.category || "No category")}</div>
+        </div>
+        <span class="pill pill-${esc(t.priority)}">${esc(t.priority)}</span>
+        <a class="btn btn-icon" href="${esc(gcalLink(t))}" target="_blank" rel="noopener" title="Add to Google Calendar"><i class="bi bi-calendar-plus"></i></a>
+      </div>`).join("")
+    : `<div class="up-empty">No tasks on this date.</div>`);
+};
+
+const renderCalendar = () => {
+  const y = calMonth.getFullYear();
+  const m = calMonth.getMonth();
+  $("calTitle").textContent = calMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const firstDay = new Date(y, m, 1).getDay();
+  const days = new Date(y, m + 1, 0).getDate();
+  const todayKey = ymd(new Date());
+
+  const byDay = {};
+  tasks.filter((t) => t.due_date && matchesFilter(t)).forEach((t) => (byDay[t.due_date] ||= []).push(t));
+
+  let cells = "";
+  for (let i = 0; i < firstDay; i++) cells += `<div class="cal-cell cal-empty"></div>`;
+  for (let d = 1; d <= days; d++) {
+    const key = `${y}-${pad(m + 1)}-${pad(d)}`;
+    const dots = (byDay[key] || []).slice(0, 4)
+      .map((t) => `<i class="dot dot-${t.status === "completed" ? "done" : esc(t.priority)}"></i>`).join("");
+    cells += `<button type="button" class="cal-cell ${key === todayKey ? "is-today" : ""} ${key === calSelected ? "is-selected" : ""}" data-date="${key}">
+      <span class="cal-num">${d}</span><span class="cal-dots">${dots}</span></button>`;
+  }
+  $("calGrid").innerHTML = cells;
+  renderDayPanel();
+};
+
+$("calGrid").addEventListener("click", (e) => {
+  const cell = e.target.closest("[data-date]");
+  if (!cell) return;
+  calSelected = cell.dataset.date;
+  renderCalendar();
+});
+$("calPrev").addEventListener("click", () => { calMonth.setMonth(calMonth.getMonth() - 1); renderCalendar(); });
+$("calNext").addEventListener("click", () => { calMonth.setMonth(calMonth.getMonth() + 1); renderCalendar(); });
+$("calToday").addEventListener("click", () => {
+  calMonth = new Date(); calMonth.setDate(1);
+  calSelected = ymd(new Date());
+  renderCalendar();
+});
+$("calFilters").addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-filter]");
+  if (!chip) return;
+  calFilter = chip.dataset.filter;
+  document.querySelectorAll("#calFilters .chip").forEach((c) => c.classList.toggle("active", c === chip));
+  renderCalendar();
+});
+
+/* ---------- calendar export (.ics with reminders) ---------- */
+const exportICS = () => {
+  const lead = getLead() * 60;
+  const esc2 = (s) => String(s || "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/[,;]/g, (c) => `\\${c}`);
+  const now = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+  const events = tasks.filter((t) => t.status === "pending" && t.due_date).map((t) => {
+    const s = deadline(t);
+    const start = t.due_time ? `DTSTART:${stamp(s)}` : `DTSTART;VALUE=DATE:${dstamp(s)}`;
+    const end = t.due_time
+      ? `DTEND:${stamp(new Date(s.getTime() + 36e5))}`
+      : `DTEND;VALUE=DATE:${dstamp(new Date(s.getTime() + 864e5))}`;
+    return [
+      "BEGIN:VEVENT", `UID:task-${t.id}@dueitnow`, `DTSTAMP:${now}`,
+      `SUMMARY:${esc2(t.title)}`, `DESCRIPTION:${esc2(t.description)}`, start, end,
+      "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${esc2(t.title)} is due soon`, `TRIGGER:-PT${lead}M`, "END:VALARM",
+      "END:VEVENT",
+    ].join("\r\n");
   });
-  notify(result.message, result.success ? "success" : "danger");
-  if (result.success) {
-    form.reset();
-    loadTasks();
-  }
-});
+  if (!events.length) return notify("No pending tasks with a due date to export.", "warning");
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Due It Now//EN", "CALSCALE:GREGORIAN", ...events, "END:VCALENDAR"].join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+  a.download = "due-it-now.ics";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  notify("Calendar file downloaded. Import it into your calendar app.");
+};
+document.querySelectorAll(".js-export").forEach((b) => b.addEventListener("click", exportICS));
 
-// EDIT (open form), UPDATE (toggle complete) and DELETE
-const editModal = new bootstrap.Modal(document.getElementById("editModal"));
+/* ---------- insights ---------- */
+let chartCat = null;
+let chartWeek = null;
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const weekStart = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+const completedDate = (t) =>
+  t.completed_at ? new Date(t.completed_at.replace(" ", "T")) : t.due_date ? new Date(`${t.due_date}T00:00:00`) : null;
 
-document.getElementById("taskBody").addEventListener("click", async (e) => {
-  const btn = e.target.closest("button");
-  if (!btn) return;
-  const id = Number(btn.dataset.id);
-  const task = tasks.find((t) => t.id == id);
+const renderInsights = () => {
+  const total = tasks.length;
+  const done = tasks.filter((t) => t.status === "completed");
+  const pct = total ? Math.round((done.length / total) * 100) : 0;
 
-  if (btn.dataset.action === "edit") {
-    document.getElementById("edit_id").value = task.id;
-    document.getElementById("edit_title").value = task.title;
-    document.getElementById("edit_category").value = task.category ?? "";
-    document.getElementById("edit_priority").value = task.priority;
-    document.getElementById("edit_status").value = task.status;
-    document.getElementById("edit_due_date").value = task.due_date ?? "";
-        document.getElementById("edit_due_time").value = (task.due_time ?? "").slice(0, 5);
-    document.getElementById("edit_description").value = task.description ?? "";
-    editModal.show();
-    return;
-  }
-  if (btn.dataset.action === "toggle") {
-    const result = await request("PUT", {
-      ...task,
-      status: task.status === "completed" ? "pending" : "completed",
-    });
-    notify(result.message, result.success ? "success" : "danger");
-  }
-  if (btn.dataset.action === "delete") {
-    if (!confirm("Delete this task?")) return;
-    const result = await request("DELETE", { id });
-    notify(result.message, result.success ? "success" : "danger");
-  }
-  loadTasks();
-});
+  $("inTotal").textContent = total;
+  $("inDone").textContent = done.length;
+  $("inPending").textContent = total - done.length;
+  $("inOverdue").textContent = tasks.filter(isOverdue).length;
+  $("inPct").textContent = `${pct}%`;
+  $("inRing").style.setProperty("--pct", pct);
 
-// Save the edited task
-document.getElementById("editForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const result = await request("PUT", {
-    id: Number(document.getElementById("edit_id").value),
-    title: document.getElementById("edit_title").value,
-    category: document.getElementById("edit_category").value,
-    priority: document.getElementById("edit_priority").value,
-    status: document.getElementById("edit_status").value,
-    due_date: document.getElementById("edit_due_date").value,
-        due_time: document.getElementById("edit_due_time").value,
-    description: document.getElementById("edit_description").value,
+  const timed = done.filter((t) => t.completed_at && t.due_date);
+  const onTime = timed.filter((t) => completedDate(t) <= deadline(t)).length;
+  $("inOnTime").textContent = timed.length ? `${Math.round((onTime / timed.length) * 100)}%` : "—";
+  $("inOnTimeSub").textContent = timed.length ? `${onTime} of ${timed.length} finished on time` : "Complete a task to see this";
+
+  const weeks = {};
+  done.forEach((t) => {
+    const d = completedDate(t);
+    if (!d) return;
+    const k = ymd(weekStart(d));
+    weeks[k] = (weeks[k] || 0) + 1;
   });
-  notify(result.message, result.success ? "success" : "danger");
-  if (result.success) {
-    editModal.hide();
-    loadTasks();
+  const best = Object.entries(weeks).sort((a, b) => b[1] - a[1])[0];
+  $("inBestWeek").textContent = best
+    ? `Week of ${new Date(`${best[0]}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "—";
+  $("inBestWeekSub").textContent = best ? `${best[1]} task(s) completed` : "No completed tasks yet";
+
+  const next = tasks.filter((t) => t.status === "pending" && t.due_date && hoursLeft(t) >= 0)
+    .sort((a, b) => deadline(a) - deadline(b)).slice(0, 5);
+  $("inUpcoming").innerHTML = next.length
+    ? next.map((t) => `
+      <div class="up-item">
+        <i class="dot dot-${esc(t.priority)}"></i>
+        <span class="up-title">${esc(t.title)}</span>
+        <span class="pill pill-${esc(t.priority)}">${esc(t.priority)}</span>
+        <span class="up-when">${esc(fmtDue(t.due_date, t.due_time))}</span>
+      </div>`).join("")
+    : `<div class="up-empty">No upcoming deadlines.</div>`;
+
+  if (typeof Chart === "undefined") return;
+
+  const wLabels = [], wValues = [];
+  const ws = weekStart(new Date());
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(ws); d.setDate(d.getDate() - i * 7);
+    wLabels.push(d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+    wValues.push(weeks[ymd(d)] || 0);
   }
-});
 
-// Live search and filter (no page reload)
-document.getElementById("search").addEventListener("input", render);
-document.getElementById("statusFilter").addEventListener("change", render);
+  const cats = {};
+  tasks.forEach((t) => {
+    const key = ((t.category || "").trim() || "Uncategorized").toLowerCase();
+    cats[key] = (cats[key] || 0) + 1;
+  });
+  const cLabels = Object.keys(cats).map((k) => k.charAt(0).toUpperCase() + k.slice(1));
+  const cValues = Object.values(cats);
 
-// Dark/light mode saved with localStorage
-const toggle = document.getElementById("themeToggle");
-const applyTheme = (theme) => {
-  document.documentElement.setAttribute("data-bs-theme", theme);
-  toggle.innerHTML = theme === "dark" ? '<i class="bi bi-sun"></i>' : '<i class="bi bi-moon"></i>';
+  const text = cssVar("--muted");
+  const line = cssVar("--line");
+  chartWeek?.destroy();
+  chartCat?.destroy();
+
+  chartWeek = new Chart($("chartWeek"), {
+    type: "line",
+    data: { labels: wLabels, datasets: [{ label: "Completed", data: wValues, borderColor: cssVar("--brand"), backgroundColor: "rgba(143,176,201,.15)", fill: true, tension: 0.35, pointRadius: 4 }] },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: text }, grid: { color: line } },
+        y: { beginAtZero: true, ticks: { color: text, precision: 0 }, grid: { color: line } },
+      },
+    },
+  });
+
+  chartCat = new Chart($("chartCat"), {
+    type: "doughnut",
+    data: { labels: cLabels, datasets: [{ data: cValues, backgroundColor: ["#8fb0c9", "#e0a63f", "#7aa38b", "#d9776c", "#a78bfa", "#64748b"], borderWidth: 0 }] },
+    options: { maintainAspectRatio: false, cutout: "68%", plugins: { legend: { position: "right", labels: { color: text } } } },
+  });
 };
-applyTheme(localStorage.getItem("theme") || "dark");
-toggle.addEventListener("click", () => {
-  const next = document.documentElement.getAttribute("data-bs-theme") === "dark" ? "light" : "dark";
-  localStorage.setItem("theme", next);
-  applyTheme(next);
-});
 
-let firstLoad = true;
-const alerted = new Set();
-
-// Deadline = date + time (23:59 if no time was set)
-const hoursLeft = (t) => (new Date(`${t.due_date}T${(t.due_time || "23:59").slice(0, 5)}`) - new Date()) / 36e5;
-
-const fmtLeft = (h) => {
-  const a = Math.abs(h);
-  const span = a < 1 ? `${Math.max(1, Math.round(a * 60))} min` : a < 24 ? `${Math.round(a)} hr` : `${Math.round(a / 24)} day(s)`;
-  return h < 0 ? `Overdue by ${span}` : `Due in ${span}`;
-};
-
+/* ---------- reminders (alerts, pop-ups, desktop notifications) ---------- */
 const urgentTasks = () =>
-  tasks.filter((t) => t.status === "pending" && t.due_date && hoursLeft(t) <= 48)
+  tasks.filter((t) => t.status === "pending" && t.due_date && hoursLeft(t) <= getLead())
        .sort((a, b) => hoursLeft(a) - hoursLeft(b));
 
 const checkDueSoon = () => {
   const list = urgentTasks();
-  document.getElementById("dueAlerts").innerHTML = list.length
+  $("dueAlerts").innerHTML = list.length
     ? `<div class="alert alert-${list.some((t) => hoursLeft(t) < 0) ? "danger" : "warning"}">
         <i class="bi bi-clock me-1"></i> ${list.map((t) => `${esc(t.title)} (${fmtLeft(hoursLeft(t))})`).join(" · ")}
        </div>`
@@ -220,7 +371,7 @@ const showPopup = (t) => {
       <div class="toast-body"><strong><i class="bi ${icon} me-1"></i>${fmtLeft(h)}</strong><br>${esc(t.title)}</div>
       <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
     </div>`;
-  document.getElementById("toastBox").appendChild(el);
+  $("toastBox").appendChild(el);
   el.addEventListener("hidden.bs.toast", () => el.remove());
   new bootstrap.Toast(el, { delay: 10000 }).show();
 
@@ -229,8 +380,6 @@ const showPopup = (t) => {
   }
 };
 
-// On page open: pop up every urgent task. Afterwards: check every minute and pop up
-// any task that gets within 1 hour of its deadline.
 const deadlinePopups = () => {
   urgentTasks().forEach((t, i) => {
     alerted.add(t.id);
@@ -240,19 +389,181 @@ const deadlinePopups = () => {
 
 setInterval(() => {
   checkDueSoon();
+  renderUpcoming();
   urgentTasks().filter((t) => hoursLeft(t) <= 1 && !alerted.has(t.id))
     .forEach((t) => { alerted.add(t.id); showPopup(t); });
 }, 60000);
 
-document.getElementById("notifyBtn").addEventListener("click", async () => {
+const updateNotifyStatus = () => {
+  $("notifyStatus").textContent = !("Notification" in window) ? "Not supported in this browser."
+    : Notification.permission === "granted" ? "Enabled."
+    : Notification.permission === "denied" ? "Blocked. Allow notifications in your browser's site settings."
+    : "Not enabled yet.";
+};
+
+$("notifyBtn").addEventListener("click", async () => {
   if (!("Notification" in window)) return notify("Notifications are not supported here.", "danger");
   const permission = await Notification.requestPermission();
   notify(permission === "granted" ? "Reminders enabled." : "Notifications are blocked.",
          permission === "granted" ? "success" : "warning");
+  updateNotifyStatus();
   checkDueSoon();
 });
 
+/* ---------- load tasks ---------- */
+const loadTasks = async () => {
+  const result = await request("GET");
+  if (!result.success) return notify(result.message, "danger");
+  tasks = result.tasks;
+  render();
+  renderUpcoming();
+  checkDueSoon();
+  if (currentView() === "calendar") renderCalendar();
+  if (currentView() === "insights") renderInsights();
+  if (firstLoad) {
+    firstLoad = false;
+    deadlinePopups();
+  }
+};
+
+/* ---------- create / edit / complete / delete ---------- */
+$("taskForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const result = await request("POST", {
+    title: $("title").value,
+    category: $("category").value,
+    priority: $("priority").value,
+    due_date: $("due_date").value,
+    due_time: $("due_time").value,
+    description: $("description").value,
+  });
+  notify(result.message, result.success ? "success" : "danger");
+  if (result.success) {
+    form.reset();
+    await loadTasks();
+    location.hash = "tasks";
+  }
+});
+
+const editModal = new bootstrap.Modal($("editModal"));
+
+$("taskBody").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  const id = Number(btn.dataset.id);
+  const task = tasks.find((t) => t.id == id);
+  if (!task) return;
+
+  if (btn.dataset.action === "edit") {
+    $("edit_id").value = task.id;
+    $("edit_title").value = task.title;
+    $("edit_category").value = task.category ?? "";
+    $("edit_priority").value = task.priority;
+    $("edit_status").value = task.status;
+    $("edit_due_date").value = task.due_date ?? "";
+    $("edit_due_time").value = (task.due_time ?? "").slice(0, 5);
+    $("edit_description").value = task.description ?? "";
+    editModal.show();
+    return;
+  }
+  if (btn.dataset.action === "toggle") {
+    const result = await request("PUT", { ...task, status: task.status === "completed" ? "pending" : "completed" });
+    notify(result.message, result.success ? "success" : "danger");
+  }
+  if (btn.dataset.action === "delete") {
+    if (!confirm("Delete this task?")) return;
+    const result = await request("DELETE", { id });
+    notify(result.message, result.success ? "success" : "danger");
+  }
+  loadTasks();
+});
+
+$("editForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const result = await request("PUT", {
+    id: Number($("edit_id").value),
+    title: $("edit_title").value,
+    category: $("edit_category").value,
+    priority: $("edit_priority").value,
+    status: $("edit_status").value,
+    due_date: $("edit_due_date").value,
+    due_time: $("edit_due_time").value,
+    description: $("edit_description").value,
+  });
+  notify(result.message, result.success ? "success" : "danger");
+  if (result.success) {
+    editModal.hide();
+    loadTasks();
+  }
+});
+
+/* ---------- search and filter ---------- */
+$("search").addEventListener("input", () => {
+  if (currentView() !== "tasks") location.hash = "tasks";
+  render();
+});
+$("statusFilter").addEventListener("change", render);
+
+/* ---------- profile ---------- */
+const loadProfile = async () => {
+  const r = await call(PROFILE_API);
+  if (!r.success) return notify(r.message, "danger");
+  const u = r.user;
+  $("pName").textContent = u.full_name;
+  $("pEmail").textContent = u.email;
+  $("pJoined").textContent = `Member since ${new Date(u.created_at.replace(" ", "T")).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`;
+  $("pf_name").value = u.full_name;
+  $("pAvatar").textContent = initialsOf(u.full_name);
+};
+
+$("nameForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const r = await call(PROFILE_API, "PUT", { action: "name", full_name: $("pf_name").value });
+  notify(r.message, r.success ? "success" : "danger");
+  if (r.success) {
+    const name = $("pf_name").value.trim();
+    $("sideName").textContent = name;
+    $("sideAvatar").textContent = initialsOf(name);
+    loadProfile();
+  }
+});
+
+$("passForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if ($("pw_new").value !== $("pw_confirm").value) return notify("New passwords do not match.", "danger");
+  const r = await call(PROFILE_API, "PUT", { action: "password", current: $("pw_current").value, new: $("pw_new").value });
+  notify(r.message, r.success ? "success" : "danger");
+  if (r.success) e.target.reset();
+});
+
+/* ---------- theme and settings ---------- */
+const themeBtn = $("themeToggle");
+const applyTheme = (theme) => {
+  document.documentElement.setAttribute("data-bs-theme", theme);
+  themeBtn.innerHTML = theme === "dark" ? '<i class="bi bi-sun"></i>' : '<i class="bi bi-moon"></i>';
+  $("setTheme").value = theme;
+  if (currentView() === "insights") renderInsights();
+};
+
+themeBtn.addEventListener("click", () => {
+  const next = document.documentElement.getAttribute("data-bs-theme") === "dark" ? "light" : "dark";
+  localStorage.setItem("theme", next);
+  applyTheme(next);
+});
+$("setTheme").addEventListener("change", (e) => {
+  localStorage.setItem("theme", e.target.value);
+  applyTheme(e.target.value);
+});
+$("setLead").addEventListener("change", (e) => {
+  localStorage.setItem("leadHours", e.target.value);
+  checkDueSoon();
+  notify("Reminder window saved.");
+});
+
+/* ---------- start ---------- */
+applyTheme(localStorage.getItem("theme") || "dark");
+$("setLead").value = String(getLead());
+updateNotifyStatus();
+showView(currentView());
 loadTasks();
-
-
-

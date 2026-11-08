@@ -27,21 +27,21 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
     <div class="brand"><span class="brand-dot"></span>Due It Now</div>
 
     <nav class="side-nav" aria-label="Main">
-      <a href="#overview" class="active"><i class="bi bi-house"></i>Overview</a>
-      <a href="#addTask"><i class="bi bi-plus-circle"></i>Add task</a>
-      <a href="#tasks"><i class="bi bi-check2-square"></i>My tasks</a>
+      <a href="#overview" data-view="overview"><i class="bi bi-house"></i>Overview</a>
+      <a href="#add" data-view="add"><i class="bi bi-plus-circle"></i>Add task</a>
+      <a href="#tasks" data-view="tasks"><i class="bi bi-check2-square"></i>My tasks</a>
+      <a href="#calendar" data-view="calendar"><i class="bi bi-calendar3"></i>Calendar</a>
+      <a href="#insights" data-view="insights"><i class="bi bi-bar-chart"></i>Insights</a>
     </nav>
 
     <div class="side-bottom">
-      <div class="side-card">
-        <h2>Deadline reminders</h2>
-        <p>Get alerts when a task is almost due.</p>
-        <button id="notifyBtn" class="btn btn-soft w-100" type="button"><i class="bi bi-bell me-1"></i>Enable</button>
-      </div>
-
+      <nav class="side-nav" aria-label="Account">
+        <a href="#profile" data-view="profile"><i class="bi bi-person"></i>Profile</a>
+        <a href="#settings" data-view="settings"><i class="bi bi-gear"></i>Settings</a>
+      </nav>
       <div class="user-row">
-        <span class="avatar"><?= htmlspecialchars($initials) ?></span>
-        <span class="user-name"><?= htmlspecialchars($name) ?></span>
+        <span class="avatar" id="sideAvatar"><?= htmlspecialchars($initials) ?></span>
+        <span class="user-name" id="sideName"><?= htmlspecialchars($name) ?></span>
         <button id="themeToggle" class="btn btn-icon" type="button" aria-label="Toggle theme"><i class="bi bi-moon"></i></button>
         <a href="api/logout.php" class="btn btn-icon" aria-label="Log out" title="Log out"><i class="bi bi-box-arrow-right"></i></a>
       </div>
@@ -57,66 +57,222 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
       </div>
     </header>
 
-    <section id="overview" class="page-head">
-      <div>
-        <h1>My Tasks</h1>
-        <p>Stay on top of your deadlines.</p>
+    <!-- OVERVIEW -->
+    <section id="view-overview" class="view">
+      <div class="page-head"><div><h1>Overview</h1><p>Stay on top of your deadlines.</p></div></div>
+      <div id="dueAlerts"></div>
+      <div class="stats stats-4" aria-label="Progress summary">
+        <div class="stat"><span class="stat-label">Pending</span><span class="stat-num" id="countPending">0</span><span class="stat-sub"><i class="dot dot-medium"></i>still to do</span></div>
+        <div class="stat"><span class="stat-label">Completed</span><span class="stat-num" id="countDone">0</span><span class="stat-sub"><i class="dot dot-done"></i>finished</span></div>
+        <div class="stat"><span class="stat-label">Overdue</span><span class="stat-num" id="countOverdue">0</span><span class="stat-sub"><i class="dot dot-high"></i>need attention</span></div>
+        <div class="stat"><span class="stat-label">Total</span><span class="stat-num" id="countTotal">0</span><span class="stat-sub"><i class="dot dot-low"></i>all tasks</span></div>
       </div>
-      <div>
-        <label for="statusFilter" class="visually-hidden">Filter by status</label>
-        <select id="statusFilter" class="form-select pill-select">
-          <option value="all">All statuses</option>
-          <option value="pending">Pending</option>
-          <option value="completed">Completed</option>
-        </select>
+      <div class="panel">
+        <h2 class="panel-title">Upcoming deadlines</h2>
+        <div class="upcoming-box"></div>
       </div>
     </section>
 
-    <div id="dueAlerts"></div>
-
-    <section class="stats" aria-label="Progress summary">
-      <div class="stat"><span class="stat-label">Pending</span><span class="stat-num" id="countPending">0</span><span class="stat-sub"><i class="dot dot-medium"></i>still to do</span></div>
-      <div class="stat"><span class="stat-label">Completed</span><span class="stat-num" id="countDone">0</span><span class="stat-sub"><i class="dot dot-done"></i>finished</span></div>
-      <div class="stat"><span class="stat-label">Total</span><span class="stat-num" id="countTotal">0</span><span class="stat-sub"><i class="dot dot-low"></i>all tasks</span></div>
+    <!-- ADD TASK -->
+    <section id="view-add" class="view" hidden>
+      <div class="page-head"><div><h1>Add task</h1><p>Create a new assignment, project, exam or personal task.</p></div></div>
+      <div class="panel">
+        <form id="taskForm" class="row g-2">
+          <div class="col-md-4">
+            <label for="title" class="form-label">Title</label>
+            <input type="text" id="title" class="form-control" required>
+          </div>
+          <div class="col-md-2">
+            <label for="category" class="form-label">Category</label>
+            <input type="text" id="category" class="form-control" list="categoryList" placeholder="e.g. Assignment">
+            <datalist id="categoryList">
+              <option value="Assignment"></option>
+              <option value="Project"></option>
+              <option value="Exam"></option>
+              <option value="Personal"></option>
+            </datalist>
+          </div>
+          <div class="col-md-2">
+            <label for="priority" class="form-label">Priority</label>
+            <select id="priority" class="form-select">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label for="due_date" class="form-label">Due date</label>
+            <input type="date" id="due_date" class="form-control">
+          </div>
+          <div class="col-md-2">
+            <label for="due_time" class="form-label">Due time</label>
+            <input type="time" id="due_time" class="form-control">
+          </div>
+          <div class="col-12">
+            <label for="description" class="form-label">Description</label>
+            <textarea id="description" class="form-control" rows="3"></textarea>
+          </div>
+          <div class="col-12"><button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add task</button></div>
+        </form>
+      </div>
     </section>
 
-    <section id="addTask" class="panel">
-      <h2 class="panel-title">Add a task</h2>
-      <form id="taskForm" class="row g-2">
-        <div class="col-md-4">
-          <label for="title" class="form-label">Title</label>
-          <input type="text" id="title" class="form-control" required>
-        </div>
-        <div class="col-md-2">
-          <label for="category" class="form-label">Category</label>
-          <input type="text" id="category" class="form-control" placeholder="e.g. School">
-        </div>
-        <div class="col-md-2">
-          <label for="priority" class="form-label">Priority</label>
-          <select id="priority" class="form-select">
-            <option value="low">Low</option>
-            <option value="medium" selected>Medium</option>
-            <option value="high">High</option>
+    <!-- MY TASKS -->
+    <section id="view-tasks" class="view" hidden>
+      <div class="page-head">
+        <div><h1>My tasks</h1><p>Search, edit, complete or delete your tasks.</p></div>
+        <div>
+          <label for="statusFilter" class="visually-hidden">Filter by status</label>
+          <select id="statusFilter" class="form-select pill-select">
+            <option value="all">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="completed">Completed</option>
           </select>
         </div>
-        <div class="col-md-2">
-          <label for="due_date" class="form-label">Due date</label>
-          <input type="date" id="due_date" class="form-control">
-        </div>
-        <div class="col-md-2">
-          <label for="due_time" class="form-label">Due time</label>
-          <input type="time" id="due_time" class="form-control">
-        </div>
-        <div class="col-12">
-          <label for="description" class="form-label">Description</label>
-          <textarea id="description" class="form-control" rows="2"></textarea>
-        </div>
-        <div class="col-12"><button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add task</button></div>
-      </form>
+      </div>
+      <div id="taskBody" class="task-list"></div>
     </section>
 
-    <section id="tasks">
-      <div id="taskBody" class="task-list"></div>
+    <!-- CALENDAR -->
+    <section id="view-calendar" class="view" hidden>
+      <div class="page-head">
+        <div><h1>Calendar</h1><p>Your academic schedule.</p></div>
+        <button type="button" class="btn btn-soft js-export"><i class="bi bi-download me-1"></i>Download .ics</button>
+      </div>
+      <div class="cal-layout">
+        <div class="panel">
+          <div class="cal-toolbar">
+            <h2 id="calTitle" class="panel-title mb-0"></h2>
+            <div class="cal-nav">
+              <button type="button" id="calPrev" class="btn btn-soft" aria-label="Previous month"><i class="bi bi-chevron-left"></i></button>
+              <button type="button" id="calToday" class="btn btn-soft">Today</button>
+              <button type="button" id="calNext" class="btn btn-soft" aria-label="Next month"><i class="bi bi-chevron-right"></i></button>
+            </div>
+          </div>
+          <div class="chip-row" id="calFilters">
+            <button type="button" class="chip active" data-filter="all">All</button>
+            <button type="button" class="chip" data-filter="assignment">Assignments</button>
+            <button type="button" class="chip" data-filter="project">Projects</button>
+            <button type="button" class="chip" data-filter="exam">Exams</button>
+            <button type="button" class="chip" data-filter="personal">Personal</button>
+          </div>
+          <div class="cal-week"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+          <div id="calGrid" class="cal-grid"></div>
+          <div class="legend">
+            <span><i class="dot dot-high"></i>High</span>
+            <span><i class="dot dot-medium"></i>Medium</span>
+            <span><i class="dot dot-low"></i>Low</span>
+            <span><i class="dot dot-done"></i>Done</span>
+          </div>
+          <hr class="cal-hr">
+          <div id="dayPanel"></div>
+        </div>
+        <div class="panel">
+          <h2 class="panel-title">Upcoming deadlines</h2>
+          <div class="upcoming-box"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- INSIGHTS -->
+    <section id="view-insights" class="view" hidden>
+      <div class="page-head"><div><h1>Insights</h1><p>Analytics and productivity.</p></div></div>
+      <div class="stats stats-4">
+        <div class="stat"><span class="stat-label">Total tasks</span><span class="stat-num" id="inTotal">0</span><span class="stat-sub"><i class="dot dot-low"></i>created</span></div>
+        <div class="stat"><span class="stat-label">Completed</span><span class="stat-num" id="inDone">0</span><span class="stat-sub"><i class="dot dot-done"></i>finished</span></div>
+        <div class="stat"><span class="stat-label">Pending</span><span class="stat-num" id="inPending">0</span><span class="stat-sub"><i class="dot dot-medium"></i>still to do</span></div>
+        <div class="stat"><span class="stat-label">Overdue</span><span class="stat-num" id="inOverdue">0</span><span class="stat-sub"><i class="dot dot-high"></i>past deadline</span></div>
+      </div>
+      <div class="insight-grid">
+        <div class="panel insight-card">
+          <div class="ring" id="inRing"><span id="inPct">0%</span></div>
+          <div><div class="stat-label">Task completion</div><div class="insight-big">Overall</div><div class="stat-sub">completed vs. total</div></div>
+        </div>
+        <div class="panel insight-card">
+          <div class="insight-icon"><i class="bi bi-alarm"></i></div>
+          <div><div class="stat-label">On-time rate</div><div class="insight-big" id="inOnTime">—</div><div class="stat-sub" id="inOnTimeSub"></div></div>
+        </div>
+        <div class="panel insight-card">
+          <div class="insight-icon"><i class="bi bi-trophy"></i></div>
+          <div><div class="stat-label">Most productive week</div><div class="insight-big" id="inBestWeek">—</div><div class="stat-sub" id="inBestWeekSub"></div></div>
+        </div>
+      </div>
+      <div class="chart-grid">
+        <div class="panel"><h2 class="panel-title">Your productivity (tasks completed per week)</h2><div class="chart-box"><canvas id="chartWeek"></canvas></div></div>
+        <div class="panel"><h2 class="panel-title">Tasks by category</h2><div class="chart-box"><canvas id="chartCat"></canvas></div></div>
+      </div>
+      <div class="panel">
+        <h2 class="panel-title">Next deadlines</h2>
+        <div id="inUpcoming"></div>
+      </div>
+    </section>
+
+    <!-- PROFILE -->
+    <section id="view-profile" class="view" hidden>
+      <div class="page-head"><div><h1>Profile</h1><p>Your account details.</p></div></div>
+      <div class="panel profile-head">
+        <span class="avatar avatar-lg" id="pAvatar"><?= htmlspecialchars($initials) ?></span>
+        <div>
+          <div class="insight-big" id="pName"><?= htmlspecialchars($name) ?></div>
+          <div class="stat-sub" id="pEmail"></div>
+          <div class="stat-sub" id="pJoined"></div>
+        </div>
+      </div>
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <form id="nameForm" class="panel h-100">
+            <h2 class="panel-title">Edit profile</h2>
+            <label for="pf_name" class="form-label">Full name</label>
+            <input type="text" id="pf_name" class="form-control mb-3" required>
+            <button type="submit" class="btn btn-primary">Save name</button>
+          </form>
+        </div>
+        <div class="col-lg-6">
+          <form id="passForm" class="panel h-100">
+            <h2 class="panel-title">Change password</h2>
+            <label for="pw_current" class="form-label">Current password</label>
+            <input type="password" id="pw_current" class="form-control mb-3" required>
+            <label for="pw_new" class="form-label">New password (8+ characters)</label>
+            <input type="password" id="pw_new" class="form-control mb-3" minlength="8" required>
+            <label for="pw_confirm" class="form-label">Confirm new password</label>
+            <input type="password" id="pw_confirm" class="form-control mb-3" minlength="8" required>
+            <button type="submit" class="btn btn-primary">Change password</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="view-settings" class="view" hidden>
+      <div class="page-head"><div><h1>Settings</h1><p>Customize how Due It Now works for you.</p></div></div>
+      <div class="panel">
+        <div class="setting-row">
+          <div><strong>Theme</strong><div class="stat-sub">Dark or light appearance.</div></div>
+          <select id="setTheme" class="form-select pill-select">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div><strong>Remind me before a deadline</strong><div class="stat-sub">Tasks inside this window appear in alerts and pop-ups.</div></div>
+          <select id="setLead" class="form-select pill-select">
+            <option value="1">1 hour</option>
+            <option value="3">3 hours</option>
+            <option value="6">6 hours</option>
+            <option value="24">1 day</option>
+            <option value="48">2 days</option>
+            <option value="72">3 days</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div><strong>Desktop notifications</strong><div class="stat-sub" id="notifyStatus"></div></div>
+          <button id="notifyBtn" class="btn btn-soft" type="button"><i class="bi bi-bell me-1"></i>Enable</button>
+        </div>
+        <div class="setting-row">
+          <div><strong>Calendar sync</strong><div class="stat-sub">Download your pending tasks with reminders. Import into Google Calendar, Outlook or your phone.</div></div>
+          <button type="button" class="btn btn-soft js-export"><i class="bi bi-download me-1"></i>Download .ics</button>
+        </div>
+      </div>
     </section>
   </main>
 </div>
@@ -134,7 +290,7 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
         <input type="text" id="edit_title" class="form-control mb-3" required>
 
         <label for="edit_category" class="form-label">Category</label>
-        <input type="text" id="edit_category" class="form-control mb-3">
+        <input type="text" id="edit_category" class="form-control mb-3" list="categoryList">
 
         <div class="row">
           <div class="col-6">
@@ -179,6 +335,7 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
 <div class="toast-container position-fixed top-0 end-0 p-3" id="toastBox"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script src="assets/dashboard.js"></script>
 <script>
   if ("serviceWorker" in navigator) {
