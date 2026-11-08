@@ -35,6 +35,13 @@ const request = async (method, body) => {
   }
 };
 
+const fmtDue = (d, t) => {
+  if (!d) return "—";
+  const date = new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const time = t ? new Date(`1970-01-01T${t}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+  return time ? `${date}, ${time}` : date;
+};
+
 const render = () => {
   const term = document.getElementById("search").value.toLowerCase();
   const status = document.getElementById("statusFilter").value;
@@ -44,40 +51,25 @@ const render = () => {
     `${title} ${category} ${description}`.toLowerCase().includes(term));
 
   document.getElementById("taskBody").innerHTML = visible.length
-    ? visible.map(({ id, title, category, priority, due_date, status: st }) => `
+    ? visible.map(({ id, title, category, priority, due_date, due_time, status: st }) => `
       <tr>
         <td class="${st === "completed" ? "text-decoration-line-through text-muted" : ""}">${esc(title)}</td>
         <td>${esc(category)}</td>
-        <td><span class="badge text-bg-${priority === "high" ? "danger" : priority === "medium" ? "warning" : "secondary"}">${esc(priority)}</span></td>
-        <td>${esc(due_date ?? "—")}</td>
-        <td>${esc(st)}</td>
-        <td>
-                  <button class="btn btn-sm btn-outline-primary" data-action="edit" data-id="${id}">Edit</button>
-          <button class="btn btn-sm btn-success" data-action="toggle" data-id="${id}">${st === "completed" ? "Undo" : "Done"}</button>
-          <button class="btn btn-sm btn-outline-danger" data-action="delete" data-id="${id}">Delete</button>
+        <td><span class="pill pill-${esc(priority)}">${esc(priority)}</span></td>
+        <td>${esc(fmtDue(due_date, due_time))}</td>
+        <td><span class="pill pill-${esc(st)}">${esc(st)}</span></td>
+        <td class="text-nowrap">
+          <button class="btn btn-sm btn-icon" data-action="edit" data-id="${id}" title="Edit"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-sm btn-icon" data-action="toggle" data-id="${id}" title="${st === "completed" ? "Mark pending" : "Mark done"}"><i class="bi ${st === "completed" ? "bi-arrow-counterclockwise" : "bi-check2"}"></i></button>
+          <button class="btn btn-sm btn-icon btn-icon-danger" data-action="delete" data-id="${id}" title="Delete"><i class="bi bi-trash"></i></button>
         </td>
       </tr>`).join("")
-    : `<tr><td colspan="6" class="text-center text-muted">No records found.</td></tr>`;
+    : `<tr><td colspan="6" class="text-center text-muted py-4">No tasks found.</td></tr>`;
 
   const done = tasks.filter((t) => t.status === "completed").length;
   document.getElementById("countDone").textContent = done;
   document.getElementById("countPending").textContent = tasks.length - done;
   document.getElementById("countTotal").textContent = tasks.length;
-};
-
-const loadTasks = async () => {
-  const result = await request("GET");
-  if (result.success) {
-    tasks = result.tasks;
-    render();
-    checkDueSoon();
-    if (firstLoad) {
-      firstLoad = false;
-      deadlinePopups();
-    }
-  } else {
-    notify(result.message, "danger");
-  }
 };
 
 // CREATE
@@ -89,6 +81,7 @@ document.getElementById("taskForm").addEventListener("submit", async (e) => {
     category: document.getElementById("category").value,
     priority: document.getElementById("priority").value,
     due_date: document.getElementById("due_date").value,
+        due_time: document.getElementById("due_time").value,
     description: document.getElementById("description").value,
   });
   notify(result.message, result.success ? "success" : "danger");
@@ -114,6 +107,7 @@ document.getElementById("taskBody").addEventListener("click", async (e) => {
     document.getElementById("edit_priority").value = task.priority;
     document.getElementById("edit_status").value = task.status;
     document.getElementById("edit_due_date").value = task.due_date ?? "";
+        document.getElementById("edit_due_time").value = (task.due_time ?? "").slice(0, 5);
     document.getElementById("edit_description").value = task.description ?? "";
     editModal.show();
     return;
@@ -143,6 +137,7 @@ document.getElementById("editForm").addEventListener("submit", async (e) => {
     priority: document.getElementById("edit_priority").value,
     status: document.getElementById("edit_status").value,
     due_date: document.getElementById("edit_due_date").value,
+        due_time: document.getElementById("edit_due_time").value,
     description: document.getElementById("edit_description").value,
   });
   notify(result.message, result.success ? "success" : "danger");
@@ -163,7 +158,7 @@ loadTasks();
 const toggle = document.getElementById("themeToggle");
 const applyTheme = (theme) => {
   document.documentElement.setAttribute("data-bs-theme", theme);
-  toggle.textContent = theme === "dark" ? "☀ Light" : "🌙 Dark";
+  toggle.innerHTML = theme === "dark" ? '<i class="bi bi-sun"></i>' : '<i class="bi bi-moon"></i>';
 };
 applyTheme(localStorage.getItem("theme") || "light");
 
@@ -173,31 +168,65 @@ toggle.addEventListener("click", () => {
   applyTheme(next);
 });
 
+let firstLoad = true;
+const alerted = new Set();
+
+// Deadline = date + time (23:59 if no time was set)
+const hoursLeft = (t) => (new Date(`${t.due_date}T${(t.due_time || "23:59").slice(0, 5)}`) - new Date()) / 36e5;
+
+const fmtLeft = (h) => {
+  const a = Math.abs(h);
+  const span = a < 1 ? `${Math.max(1, Math.round(a * 60))} min` : a < 24 ? `${Math.round(a)} hr` : `${Math.round(a / 24)} day(s)`;
+  return h < 0 ? `Overdue by ${span}` : `Due in ${span}`;
+};
+
+const urgentTasks = () =>
+  tasks.filter((t) => t.status === "pending" && t.due_date && hoursLeft(t) <= 48)
+       .sort((a, b) => hoursLeft(a) - hoursLeft(b));
+
 const checkDueSoon = () => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const daysLeft = (d) => Math.round((new Date(`${d}T00:00:00`) - today) / 86400000);
+  const list = urgentTasks();
+  document.getElementById("dueAlerts").innerHTML = list.length
+    ? `<div class="alert alert-${list.some((t) => hoursLeft(t) < 0) ? "danger" : "warning"}">
+        <i class="bi bi-clock me-1"></i> ${list.map((t) => `${esc(t.title)} (${fmtLeft(hoursLeft(t))})`).join(" · ")}
+       </div>`
+    : "";
+};
 
-  const pending = tasks.filter((t) => t.status === "pending" && t.due_date);
-  const overdue = pending.filter((t) => daysLeft(t.due_date) < 0);
-  const soon = pending.filter((t) => daysLeft(t.due_date) >= 0 && daysLeft(t.due_date) <= 2);
+const showPopup = (t) => {
+  const h = hoursLeft(t);
+  const [icon, color] = h < 0 ? ["bi-exclamation-octagon", "danger"] : h < 24 ? ["bi-exclamation-triangle", "danger"] : ["bi-clock", "warning"];
+  const el = document.createElement("div");
+  el.className = `toast border-0 text-bg-${color}`;
+  el.setAttribute("role", "alert");
+  el.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body"><strong><i class="bi ${icon} me-1"></i>${fmtLeft(h)}</strong><br>${esc(t.title)}</div>
+      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>`;
+  document.getElementById("toastBox").appendChild(el);
+  el.addEventListener("hidden.bs.toast", () => el.remove());
+  new bootstrap.Toast(el, { delay: 10000 }).show();
 
-  let html = "";
-  if (overdue.length)
-    html += `<div class="alert alert-danger">⚠ Overdue: ${overdue.map((t) => esc(t.title)).join(", ")}</div>`;
-  if (soon.length)
-    html += `<div class="alert alert-warning">⏰ Due soon: ${soon
-      .map((t) => `${esc(t.title)} (${daysLeft(t.due_date) === 0 ? "today" : `in ${daysLeft(t.due_date)} day(s)`})`)
-      .join(", ")}</div>`;
-  document.getElementById("dueAlerts").innerHTML = html;
-
-
-  if ("Notification" in window && Notification.permission === "granted" &&
-      (overdue.length || soon.length) && !sessionStorage.getItem("notified")) {
-    new Notification("Due It Now", { body: `${overdue.length} overdue, ${soon.length} due soon` });
-    sessionStorage.setItem("notified", "1");
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification(fmtLeft(h), { body: t.title, tag: `task-${t.id}` });
   }
 };
+
+// On page open: pop up every urgent task. Afterwards: check every minute and pop up
+// any task that gets within 1 hour of its deadline.
+const deadlinePopups = () => {
+  urgentTasks().forEach((t, i) => {
+    alerted.add(t.id);
+    setTimeout(() => showPopup(t), i * 600);
+  });
+};
+
+setInterval(() => {
+  checkDueSoon();
+  urgentTasks().filter((t) => hoursLeft(t) <= 1 && !alerted.has(t.id))
+    .forEach((t) => { alerted.add(t.id); showPopup(t); });
+}, 60000);
 
 document.getElementById("notifyBtn").addEventListener("click", async () => {
   if (!("Notification" in window)) return notify("Notifications are not supported here.", "danger");
@@ -207,40 +236,4 @@ document.getElementById("notifyBtn").addEventListener("click", async () => {
   checkDueSoon();
 });
 
-let firstLoad = true;
 
-const deadlinePopups = () => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const daysLeft = (d) => Math.round((new Date(`${d}T00:00:00`) - today) / 86400000);
-
-  const urgent = tasks
-    .filter((t) => t.status === "pending" && t.due_date && daysLeft(t.due_date) <= 2)
-    .sort((a, b) => daysLeft(a.due_date) - daysLeft(b.due_date));
-
-  const box = document.getElementById("toastBox");
-  urgent.forEach((t, i) => setTimeout(() => {
-    const d = daysLeft(t.due_date);
-    const [icon, label, color] =
-      d < 0 ? ["🚨", `Overdue by ${-d} day(s)`, "danger"] :
-      d === 0 ? ["⚠️", "Due TODAY", "danger"] :
-      ["⏰", `Due in ${d} day(s)`, "warning"];
-
-    const el = document.createElement("div");
-    el.className = `toast border-0 text-bg-${color}`;
-    el.setAttribute("role", "alert");
-    el.innerHTML = `
-      <div class="d-flex">
-        <div class="toast-body"><strong>${icon} ${label}</strong><br>${esc(t.title)}</div>
-        <button type="button" class="btn-close ${color === "danger" ? "btn-close-white" : ""} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-      </div>`;
-    box.appendChild(el);
-    el.addEventListener("hidden.bs.toast", () => el.remove());
-    new bootstrap.Toast(el, { delay: 10000 }).show();
-
-    // Windows desktop notification (only if you clicked Enable reminders and allowed it)
-    if ("Notification" in window && Notification.permission === "granted") {
-      new Notification(`${icon} ${label}`, { body: t.title, tag: `task-${t.id}` });
-    }
-  }, i * 600));
-};
