@@ -51,20 +51,25 @@ const render = () => {
     `${title} ${category} ${description}`.toLowerCase().includes(term));
 
   document.getElementById("taskBody").innerHTML = visible.length
-    ? visible.map(({ id, title, category, priority, due_date, due_time, status: st }) => `
-      <tr>
-        <td class="${st === "completed" ? "text-decoration-line-through text-muted" : ""}">${esc(title)}</td>
-        <td>${esc(category)}</td>
-        <td><span class="pill pill-${esc(priority)}">${esc(priority)}</span></td>
-        <td>${esc(fmtDue(due_date, due_time))}</td>
-        <td><span class="pill pill-${esc(st)}">${esc(st)}</span></td>
-        <td class="text-nowrap">
-          <button class="btn btn-sm btn-icon" data-action="edit" data-id="${id}" title="Edit"><i class="bi bi-pencil"></i></button>
-          <button class="btn btn-sm btn-icon" data-action="toggle" data-id="${id}" title="${st === "completed" ? "Mark pending" : "Mark done"}"><i class="bi ${st === "completed" ? "bi-arrow-counterclockwise" : "bi-check2"}"></i></button>
-          <button class="btn btn-sm btn-icon btn-icon-danger" data-action="delete" data-id="${id}" title="Delete"><i class="bi bi-trash"></i></button>
-        </td>
-      </tr>`).join("")
-    : `<tr><td colspan="6" class="text-center text-muted py-4">No tasks found.</td></tr>`;
+    ? visible.map(({ id, title, category, description, priority, due_date, due_time, status: st }) => `
+      <div class="task ${st === "completed" ? "is-done" : ""}">
+        <span class="dot dot-${st === "completed" ? "done" : esc(priority)}"></span>
+        <div class="task-main">
+          <div class="task-title">${esc(title)}</div>
+          <div class="task-sub">${esc([category, description].filter(Boolean).join(" · ") || "No details")}</div>
+        </div>
+        <div class="task-meta">
+          <span class="pill pill-${esc(priority)}">${esc(priority)}</span>
+          <span class="pill pill-${esc(st)}">${esc(st)}</span>
+          <span class="pill pill-due"><i class="bi bi-clock me-1"></i>${esc(fmtDue(due_date, due_time))}</span>
+          <span class="task-actions">
+            <button class="btn btn-icon" data-action="edit" data-id="${id}" title="Edit"><i class="bi bi-pencil"></i></button>
+            <button class="btn btn-icon" data-action="toggle" data-id="${id}" title="${st === "completed" ? "Mark pending" : "Mark done"}"><i class="bi ${st === "completed" ? "bi-arrow-counterclockwise" : "bi-check2"}"></i></button>
+            <button class="btn btn-icon btn-icon-danger" data-action="delete" data-id="${id}" title="Delete"><i class="bi bi-trash"></i></button>
+          </span>
+        </div>
+      </div>`).join("")
+    : `<div class="empty"><i class="bi bi-inbox"></i><p>No tasks found.</p></div>`;
 
   const done = tasks.filter((t) => t.status === "completed").length;
   document.getElementById("countDone").textContent = done;
@@ -172,8 +177,7 @@ const applyTheme = (theme) => {
   document.documentElement.setAttribute("data-bs-theme", theme);
   toggle.innerHTML = theme === "dark" ? '<i class="bi bi-sun"></i>' : '<i class="bi bi-moon"></i>';
 };
-applyTheme(localStorage.getItem("theme") || "light");
-
+applyTheme(localStorage.getItem("theme") || "dark");
 toggle.addEventListener("click", () => {
   const next = document.documentElement.getAttribute("data-bs-theme") === "dark" ? "light" : "dark";
   localStorage.setItem("theme", next);
