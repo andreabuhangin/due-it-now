@@ -70,7 +70,11 @@ const loadTasks = async () => {
   if (result.success) {
     tasks = result.tasks;
     render();
-     checkDueSoon();
+    checkDueSoon();
+    if (firstLoad) {
+      firstLoad = false;
+      deadlinePopups();
+    }
   } else {
     notify(result.message, "danger");
   }
@@ -186,10 +190,7 @@ const checkDueSoon = () => {
       .map((t) => `${esc(t.title)} (${daysLeft(t.due_date) === 0 ? "today" : `in ${daysLeft(t.due_date)} day(s)`})`)
       .join(", ")}</div>`;
   document.getElementById("dueAlerts").innerHTML = html;
-  if ((overdue.length || soon.length) && !sessionStorage.getItem("toasted")) {
-  notify(`${overdue.length} overdue, ${soon.length} due soon. Check your list!`, overdue.length ? "danger" : "warning");
-  sessionStorage.setItem("toasted", "1");
-}
+
 
   if ("Notification" in window && Notification.permission === "granted" &&
       (overdue.length || soon.length) && !sessionStorage.getItem("notified")) {
@@ -205,3 +206,41 @@ document.getElementById("notifyBtn").addEventListener("click", async () => {
          permission === "granted" ? "success" : "warning");
   checkDueSoon();
 });
+
+let firstLoad = true;
+
+const deadlinePopups = () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysLeft = (d) => Math.round((new Date(`${d}T00:00:00`) - today) / 86400000);
+
+  const urgent = tasks
+    .filter((t) => t.status === "pending" && t.due_date && daysLeft(t.due_date) <= 2)
+    .sort((a, b) => daysLeft(a.due_date) - daysLeft(b.due_date));
+
+  const box = document.getElementById("toastBox");
+  urgent.forEach((t, i) => setTimeout(() => {
+    const d = daysLeft(t.due_date);
+    const [icon, label, color] =
+      d < 0 ? ["🚨", `Overdue by ${-d} day(s)`, "danger"] :
+      d === 0 ? ["⚠️", "Due TODAY", "danger"] :
+      ["⏰", `Due in ${d} day(s)`, "warning"];
+
+    const el = document.createElement("div");
+    el.className = `toast border-0 text-bg-${color}`;
+    el.setAttribute("role", "alert");
+    el.innerHTML = `
+      <div class="d-flex">
+        <div class="toast-body"><strong>${icon} ${label}</strong><br>${esc(t.title)}</div>
+        <button type="button" class="btn-close ${color === "danger" ? "btn-close-white" : ""} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>`;
+    box.appendChild(el);
+    el.addEventListener("hidden.bs.toast", () => el.remove());
+    new bootstrap.Toast(el, { delay: 10000 }).show();
+
+    // Windows desktop notification (only if you clicked Enable reminders and allowed it)
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(`${icon} ${label}`, { body: t.title, tag: `task-${t.id}` });
+    }
+  }, i * 600));
+};
