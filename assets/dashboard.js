@@ -72,6 +72,21 @@ const render = () => {
   document.getElementById("countTotal").textContent = tasks.length;
 };
 
+const loadTasks = async () => {
+  const result = await request("GET");
+  if (result.success) {
+    tasks = result.tasks;
+    render();
+    checkDueSoon();
+    if (firstLoad) {
+      firstLoad = false;
+      deadlinePopups();
+    }
+  } else {
+    notify(result.message, "danger");
+  }
+};
+
 // CREATE
 document.getElementById("taskForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -150,9 +165,6 @@ document.getElementById("editForm").addEventListener("submit", async (e) => {
 // Live search and filter (no page reload)
 document.getElementById("search").addEventListener("input", render);
 document.getElementById("statusFilter").addEventListener("change", render);
-
-
-loadTasks();
 
 // Dark/light mode saved with localStorage
 const toggle = document.getElementById("themeToggle");
@@ -235,5 +247,8 @@ document.getElementById("notifyBtn").addEventListener("click", async () => {
          permission === "granted" ? "success" : "warning");
   checkDueSoon();
 });
+
+loadTasks();
+
 
 
