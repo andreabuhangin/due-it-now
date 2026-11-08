@@ -13,6 +13,8 @@ if (!isset($_SESSION["user_id"])) {
   <title>Due It Now – Dashboard</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/style.css" rel="stylesheet">
+    <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0d6efd">
 </head>
 <body class="bg-body-tertiary">
   <nav class="navbar bg-body shadow-sm">
@@ -93,5 +95,10 @@ if (!isset($_SESSION["user_id"])) {
   </main>
 
   <script src="assets/dashboard.js"></script>
+    <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("service-worker.js");
+    }
+  </script>
 </body>
 </html>
