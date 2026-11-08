@@ -28,3 +28,15 @@ registerForm?.addEventListener("submit", async (e) => {
   showAlert(result.message, result.success ? "success" : "danger");
   if (result.success) registerForm.reset();
 });
+
+const loginForm = document.getElementById("loginForm");
+
+loginForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const result = await sendData("api/login.php", {
+    email: document.getElementById("email").value,
+    password: document.getElementById("password").value,
+  });
+  if (result.success) window.location.href = "dashboard.php";
+  else showAlert(result.message, "danger");
+});
