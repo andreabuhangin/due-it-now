@@ -30,7 +30,8 @@ if (!isset($_SESSION["user_id"])) {
 
   <main class="container py-4">
     <div id="alert" role="alert"></div>
-
+   <button id="notifyBtn" class="btn btn-outline-primary btn-sm mb-3" type="button">🔔 Enable reminders</button>
+<div id="dueAlerts"></div>
     <section class="row g-3 mb-4" aria-label="Progress summary">
       <div class="col-4"><div class="card card-body text-center"><div class="h3 mb-0" id="countPending">0</div><small>Pending</small></div></div>
       <div class="col-4"><div class="card card-body text-center"><div class="h3 mb-0" id="countDone">0</div><small>Completed</small></div></div>

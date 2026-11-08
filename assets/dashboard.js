@@ -59,6 +59,7 @@ const loadTasks = async () => {
   if (result.success) {
     tasks = result.tasks;
     render();
+     checkDueSoon();
   } else {
     notify(result.message, "danger");
   }
@@ -108,6 +109,7 @@ document.getElementById("taskBody").addEventListener("click", async (e) => {
 document.getElementById("search").addEventListener("input", render);
 document.getElementById("statusFilter").addEventListener("change", render);
 
+
 loadTasks();
 
 // Dark/light mode saved with localStorage
@@ -122,4 +124,37 @@ toggle.addEventListener("click", () => {
   const next = document.documentElement.getAttribute("data-bs-theme") === "dark" ? "light" : "dark";
   localStorage.setItem("theme", next);
   applyTheme(next);
+});
+
+const checkDueSoon = () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysLeft = (d) => Math.round((new Date(`${d}T00:00:00`) - today) / 86400000);
+
+  const pending = tasks.filter((t) => t.status === "pending" && t.due_date);
+  const overdue = pending.filter((t) => daysLeft(t.due_date) < 0);
+  const soon = pending.filter((t) => daysLeft(t.due_date) >= 0 && daysLeft(t.due_date) <= 2);
+
+  let html = "";
+  if (overdue.length)
+    html += `<div class="alert alert-danger">⚠ Overdue: ${overdue.map((t) => esc(t.title)).join(", ")}</div>`;
+  if (soon.length)
+    html += `<div class="alert alert-warning">⏰ Due soon: ${soon
+      .map((t) => `${esc(t.title)} (${daysLeft(t.due_date) === 0 ? "today" : `in ${daysLeft(t.due_date)} day(s)`})`)
+      .join(", ")}</div>`;
+  document.getElementById("dueAlerts").innerHTML = html;
+
+  if ("Notification" in window && Notification.permission === "granted" &&
+      (overdue.length || soon.length) && !sessionStorage.getItem("notified")) {
+    new Notification("Due It Now", { body: `${overdue.length} overdue, ${soon.length} due soon` });
+    sessionStorage.setItem("notified", "1");
+  }
+};
+
+document.getElementById("notifyBtn").addEventListener("click", async () => {
+  if (!("Notification" in window)) return notify("Notifications are not supported here.", "danger");
+  const permission = await Notification.requestPermission();
+  notify(permission === "granted" ? "Reminders enabled." : "Notifications are blocked.",
+         permission === "granted" ? "success" : "warning");
+  checkDueSoon();
 });
