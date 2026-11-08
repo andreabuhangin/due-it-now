@@ -18,13 +18,14 @@ if (!isset($_SESSION["user_id"])) {
   <meta name="theme-color" content="#0d6efd">
 </head>
 <body class="bg-body-tertiary">
-  <nav class="navbar bg-body shadow-sm">
+<nav class="navbar bg-body shadow-sm sticky-top">
   <div class="container">
     <span class="navbar-brand fw-bold">Due It Now</span>
     <span>
       Hi, <?= htmlspecialchars($_SESSION["full_name"]) ?>
-      <but<button id="themeToggle" class="btn btn-sm btn-outline-secondary ms-2" type="button" aria-label="Toggle theme"><i class="bi bi-moon"></i></button>
-<a href="api/logout.php" class="btn btn-sm btn-outline-secondary ms-2"><i class="bi bi-box-arrow-right me-1"></i>Log out</a>
+      <button id="themeToggle" class="btn btn-sm btn-outline-secondary ms-2" type="button" aria-label="Toggle theme"><i class="bi bi-moon"></i></button>
+      <a href="api/logout.php" class="btn btn-sm btn-outline-secondary ms-2"><i class="bi bi-box-arrow-right me-1"></i>Log out</a>
+    </span>
   </div>
 </nav>
 
