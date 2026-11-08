@@ -42,6 +42,7 @@ const render = () => {
         <td>${esc(due_date ?? "—")}</td>
         <td>${esc(st)}</td>
         <td>
+                  <button class="btn btn-sm btn-outline-primary" data-action="edit" data-id="${id}">Edit</button>
           <button class="btn btn-sm btn-success" data-action="toggle" data-id="${id}">${st === "completed" ? "Undo" : "Done"}</button>
           <button class="btn btn-sm btn-outline-danger" data-action="delete" data-id="${id}">Delete</button>
         </td>
@@ -83,13 +84,26 @@ document.getElementById("taskForm").addEventListener("submit", async (e) => {
   }
 });
 
-// UPDATE (toggle complete) and DELETE
+// EDIT (open form), UPDATE (toggle complete) and DELETE
+const editModal = new bootstrap.Modal(document.getElementById("editModal"));
+
 document.getElementById("taskBody").addEventListener("click", async (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
   const id = Number(btn.dataset.id);
   const task = tasks.find((t) => t.id == id);
 
+  if (btn.dataset.action === "edit") {
+    document.getElementById("edit_id").value = task.id;
+    document.getElementById("edit_title").value = task.title;
+    document.getElementById("edit_category").value = task.category ?? "";
+    document.getElementById("edit_priority").value = task.priority;
+    document.getElementById("edit_status").value = task.status;
+    document.getElementById("edit_due_date").value = task.due_date ?? "";
+    document.getElementById("edit_description").value = task.description ?? "";
+    editModal.show();
+    return;
+  }
   if (btn.dataset.action === "toggle") {
     const result = await request("PUT", {
       ...task,
@@ -103,6 +117,25 @@ document.getElementById("taskBody").addEventListener("click", async (e) => {
     notify(result.message, result.success ? "success" : "danger");
   }
   loadTasks();
+});
+
+// Save the edited task
+document.getElementById("editForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const result = await request("PUT", {
+    id: Number(document.getElementById("edit_id").value),
+    title: document.getElementById("edit_title").value,
+    category: document.getElementById("edit_category").value,
+    priority: document.getElementById("edit_priority").value,
+    status: document.getElementById("edit_status").value,
+    due_date: document.getElementById("edit_due_date").value,
+    description: document.getElementById("edit_description").value,
+  });
+  notify(result.message, result.success ? "success" : "danger");
+  if (result.success) {
+    editModal.hide();
+    loadTasks();
+  }
 });
 
 // Live search and filter (no page reload)
