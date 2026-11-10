@@ -11,10 +11,11 @@ if (!isset($_SESSION["user_id"])) {
 $uid = $_SESSION["user_id"];
 
 if ($_SERVER["REQUEST_METHOD"] === "GET") {
-    $stmt = $conn->prepare("SELECT full_name, email, created_at FROM users WHERE id = ?");
+    $stmt = $conn->prepare("SELECT full_name, email, created_at, (google_refresh_token IS NOT NULL) AS google FROM users WHERE id = ?");
     $stmt->bind_param("i", $uid);
     $stmt->execute();
-    echo json_encode(["success" => true, "user" => $stmt->get_result()->fetch_assoc()]);
+    $user = $stmt->get_result()->fetch_assoc();
+    echo json_encode(["success" => true, "user" => $user]);
     exit;
 }
 

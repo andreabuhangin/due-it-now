@@ -561,9 +561,33 @@ $("setLead").addEventListener("change", (e) => {
   notify("Reminder window saved.");
 });
 
+/* ---------- Google Calendar connection ---------- */
+const loadGoogle = async () => {
+  const r = await call(PROFILE_API);
+  const on = r.success && Number(r.user.google) === 1;
+  $("gStatus").textContent = on
+    ? "Connected. Tasks are added to your Google Calendar automatically."
+    : "Not connected.";
+  $("gActions").innerHTML = on
+    ? `<button type="button" class="btn btn-soft" id="gOff">Disconnect</button>`
+    : `<a class="btn btn-primary" href="api/google_connect.php"><i class="bi bi-google me-1"></i>Connect</a>`;
+  $("gBanner").innerHTML = on ? "" : `
+    <div class="alert alert-warning d-flex justify-content-between align-items-center">
+      <span>Connect Google Calendar once, and every task syncs automatically.</span>
+      <a class="btn btn-primary btn-sm" href="api/google_connect.php">Connect</a>
+    </div>`;
+  const off = document.getElementById("gOff");
+  if (off) off.addEventListener("click", async () => {
+    if (!confirm("Disconnect Google Calendar? Existing events stay in Google.")) return;
+    const x = await call("api/google_disconnect.php", "POST", {});
+    notify(x.message, x.success ? "success" : "danger");
+    loadGoogle();
+  });
+};
 /* ---------- start ---------- */
 applyTheme(localStorage.getItem("theme") || "dark");
 $("setLead").value = String(getLead());
 updateNotifyStatus();
 showView(currentView());
 loadTasks();
+   loadGoogle(); 

@@ -14,6 +14,8 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Due It Now – Dashboard</title>
+  <link rel="icon" type="image/png" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/style.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -24,8 +26,7 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
 <div class="app">
 
   <aside class="sidebar">
-    <div class="brand"><span class="brand-dot"></span>Due It Now</div>
-
+    <div class="brand"><img src="assets/logo.png" alt="" width="28" height="28" style="border-radius:8px; margin-right:8px;">Due It Now</div>
     <nav class="side-nav" aria-label="Main">
       <a href="#overview" data-view="overview"><i class="bi bi-house"></i>Overview</a>
       <a href="#add" data-view="add"><i class="bi bi-plus-circle"></i>Add task</a>
@@ -139,6 +140,7 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
         <div><h1>Calendar</h1><p>Your academic schedule.</p></div>
         <button type="button" class="btn btn-soft js-export"><i class="bi bi-download me-1"></i>Download .ics</button>
       </div>
+         <div id="gBanner"></div>
       <div class="cal-layout">
         <div class="panel">
           <div class="cal-toolbar">
@@ -268,6 +270,10 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
           <div><strong>Desktop notifications</strong><div class="stat-sub" id="notifyStatus"></div></div>
           <button id="notifyBtn" class="btn btn-soft" type="button"><i class="bi bi-bell me-1"></i>Enable</button>
         </div>
+        <div class="setting-row">
+  <div><strong>Google Calendar</strong><div class="stat-sub" id="gStatus">Checking...</div></div>
+  <div id="gActions"></div>
+</div>
         <div class="setting-row">
           <div><strong>Calendar sync</strong><div class="stat-sub">Download your pending tasks with reminders. Import into Google Calendar, Outlook or your phone.</div></div>
           <button type="button" class="btn btn-soft js-export"><i class="bi bi-download me-1"></i>Download .ics</button>

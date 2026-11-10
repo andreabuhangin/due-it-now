@@ -1,4 +1,4 @@
-   const CACHE = "dueitnow-v1";
+   const CACHE = "dueitnow-v2";
    const FILES = [
      "/due_it_now/assets/style.css",
      "/due_it_now/assets/dashboard.js",
