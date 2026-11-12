@@ -3,6 +3,7 @@
 A web-based task manager where each user registers, logs in and manages their own tasks, with priorities, statuses, due times and a dark mode.
 
 **Live site:** https://due-it-now.onrender.com
+
 **Repository:** https://github.com/andreabuhangin/due-it-now
 
 ## Features
