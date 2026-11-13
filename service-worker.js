@@ -7,10 +7,9 @@ const FILES = [
 ];
 
 self.addEventListener("install", (e) => {
+  // Cache what we can; one missing file must not stop the worker from installing.
   e.waitUntil(
-    caches.open(CACHE).then((c) =>
-      Promise.all(FILES.map((f) => c.add(f).catch(() => {})))
-    )
+    caches.open(CACHE).then((c) => Promise.allSettled(FILES.map((f) => c.add(f))))
   );
   self.skipWaiting();
 });
