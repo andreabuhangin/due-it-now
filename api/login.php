@@ -3,14 +3,9 @@ session_start();
 header("Content-Type: application/json");
 require "../config/db.php";
 
-$data  = json_decode(file_get_contents("php://input"), true) ?? [];
-$email = strtolower(trim($data["email"] ?? ""));
+$data  = json_decode(file_get_contents("php://input"), true);
+$email = trim($data["email"] ?? "");
 $pass  = $data["password"] ?? "";
-
-if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-    echo json_encode(["success" => false, "message" => "Please enter a valid email address."]);
-    exit;
-}
 
 $stmt = $conn->prepare("SELECT id, full_name, password_hash, role FROM users WHERE email = ?");
 $stmt->bind_param("s", $email);

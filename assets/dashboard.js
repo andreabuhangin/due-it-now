@@ -3,6 +3,7 @@ const PROFILE_API = "api/profile.php";
 const $ = (id) => document.getElementById(id);
 
 let tasks = [];
+let firstLoad = true;
 const alerted = new Set();
 
 /* ---------- helpers ---------- */
@@ -19,10 +20,7 @@ const deadline = (t) => new Date(`${t.due_date}T${(t.due_time || "23:59").slice(
 const hoursLeft = (t) => (deadline(t) - new Date()) / 36e5;
 const dayDiff = (t) => Math.round((new Date(`${t.due_date}T00:00:00`) - startOfToday()) / 864e5);
 const isOverdue = (t) => t.status === "pending" && t.due_date && hoursLeft(t) < 0;
-const currentView = () => {
-  const view = location.hash.slice(1) || "overview";
-  return view === "add" ? "tasks" : view;
-};
+const currentView = () => location.hash.slice(1) || "overview";
 const getLead = () => Number(localStorage.getItem("leadHours")) || 48;
 const initialsOf = (name) => {
   const p = name.trim().split(/\s+/);
@@ -72,7 +70,7 @@ const call = async (url, method = "GET", body) => {
 const request = (method, body) => call(API, method, body);
 
 /* ---------- views (sidebar pages) ---------- */
-const VIEWS = ["overview", "tasks", "insights", "calendar", "profile", "settings"];
+const VIEWS = ["overview", "add", "tasks", "insights", "calendar", "profile", "settings"];
 
 const showView = (name) => {
   if (!VIEWS.includes(name)) name = "overview";
@@ -86,53 +84,33 @@ const showView = (name) => {
 window.addEventListener("hashchange", () => showView(currentView()));
 
 /* ---------- task list (My tasks) ---------- */
-const openTaskEditor = (task) => {
-  if (!task) return;
-  $("edit_id").value = task.id;
-  $("edit_title").value = task.title;
-  $("edit_category").value = task.category ?? "";
-  $("edit_priority").value = task.priority;
-  $("edit_due_date").value = task.due_date ?? "";
-  $("edit_due_time").value = (task.due_time ?? "").slice(0, 5);
-  $("edit_description").value = task.description ?? "";
-  editModal.show();
-};
-
 const render = () => {
   const term = $("search").value.toLowerCase();
   const status = $("statusFilter").value;
 
-  const visible = tasks.filter((t) => {
-    const effectiveStatus = isOverdue(t) ? "overdue" : t.status;
-    return (status === "all" || effectiveStatus === status) &&
-      `${t.title} ${t.category} ${t.description}`.toLowerCase().includes(term);
-  });
+  const visible = tasks.filter(({ title, category, description, status: st }) =>
+    (status === "all" || st === status) &&
+    `${title} ${category} ${description}`.toLowerCase().includes(term));
 
   $("taskBody").innerHTML = visible.length
-    ? visible.map((t) => {
-      const overdue = isOverdue(t);
-      const statusLabel = overdue ? "Overdue" : (t.status === "completed" ? "Completed" : "Pending");
-      const checked = t.status === "completed";
-      return `
-      <div class="task task-card ${checked ? "is-done" : ""}" data-task-card="${t.id}" tabindex="0" role="group" aria-label="Task: ${esc(t.title)}. Press Enter to edit details.">
-        ${checked
-          ? `<button type="button" class="task-retry" data-action="retry" data-id="${t.id}" aria-label="Retry task" title="Move task back to Pending">
-               <i class="bi bi-arrow-counterclockwise"></i><span>Retry</span>
-             </button>`
-          : `<button type="button" class="task-checkbox" data-action="toggle" data-id="${t.id}" aria-label="Mark completed" title="Mark completed">
-               <i class="bi bi-square"></i>
-             </button>`}
+    ? visible.map(({ id, title, category, description, priority, due_date, due_time, status: st }) => `
+      <div class="task ${st === "completed" ? "is-done" : ""}">
+        <span class="dot dot-${st === "completed" ? "done" : esc(priority)}"></span>
         <div class="task-main">
-          <div class="task-title">${esc(t.title)}</div>
-          <div class="task-sub">${esc([t.category, t.description].filter(Boolean).join(" · ") || "No details")}</div>
+          <div class="task-title">${esc(title)}</div>
+          <div class="task-sub">${esc([category, description].filter(Boolean).join(" · ") || "No details")}</div>
         </div>
         <div class="task-meta">
-          <span class="pill pill-${esc(t.priority)}">${esc(t.priority)}</span>
-          <span class="pill ${overdue ? "pill-overdue" : checked ? "pill-completed" : "pill-pending"}">${statusLabel}</span>
-          <span class="pill pill-due"><i class="bi bi-clock me-1"></i>${esc(fmtDue(t.due_date, t.due_time))}</span>
+          <span class="pill pill-${esc(priority)}">${esc(priority)}</span>
+          <span class="pill pill-${esc(st)}">${esc(st)}</span>
+          <span class="pill pill-due"><i class="bi bi-clock me-1"></i>${esc(fmtDue(due_date, due_time))}</span>
+          <span class="task-actions">
+            <button class="btn btn-icon" data-action="edit" data-id="${id}" title="Edit"><i class="bi bi-pencil"></i></button>
+            <button class="btn btn-icon" data-action="toggle" data-id="${id}" title="${st === "completed" ? "Mark pending" : "Mark done"}"><i class="bi ${st === "completed" ? "bi-arrow-counterclockwise" : "bi-check2"}"></i></button>
+            <button class="btn btn-icon btn-icon-danger" data-action="delete" data-id="${id}" title="Delete"><i class="bi bi-trash"></i></button>
+          </span>
         </div>
-      </div>`;
-    }).join("")
+      </div>`).join("")
     : `<div class="empty"><i class="bi bi-inbox"></i><p>No tasks found.</p></div>`;
 
   const done = tasks.filter((t) => t.status === "completed").length;
@@ -140,7 +118,6 @@ const render = () => {
   $("countPending").textContent = tasks.length - done;
   $("countOverdue").textContent = tasks.filter(isOverdue).length;
   $("countTotal").textContent = tasks.length;
-  renderNotifications();
 };
 
 /* ---------- upcoming deadlines (Overview + Calendar) ---------- */
@@ -369,51 +346,69 @@ const renderInsights = () => {
   });
 };
 
-/* ---------- centralized overdue notifications ---------- */
-const overdueTasks = () =>
-  tasks.filter((t) => isOverdue(t)).sort((a, b) => deadline(a) - deadline(b));
+/* ---------- reminders (alerts, pop-ups, desktop notifications) ---------- */
+const urgentTasks = () =>
+  tasks.filter((t) => t.status === "pending" && t.due_date && hoursLeft(t) <= getLead())
+       .sort((a, b) => hoursLeft(a) - hoursLeft(b));
 
-const renderNotifications = () => {
-  const list = overdueTasks();
-  const badge = $("overdueBadge");
-  badge.textContent = list.length > 99 ? "99+" : String(list.length);
-  badge.hidden = list.length === 0;
-  $("notificationCountLabel").textContent = `${list.length} ${list.length === 1 ? "task" : "tasks"}`;
-  $("notificationList").innerHTML = list.length
-    ? list.map((t) => `
-      <button type="button" class="notification-item" data-notification-task="${t.id}">
-        <span class="notification-item-icon"><i class="bi bi-exclamation-circle"></i></span>
-        <span class="notification-item-copy"><strong>${esc(t.title)}</strong><small>Due ${esc(fmtDue(t.due_date, t.due_time))}</small></span>
-      </button>`).join("")
-    : `<div class="notification-empty"><i class="bi bi-check-circle"></i><span>No overdue tasks.</span></div>`;
+const checkDueSoon = () => {
+  const list = urgentTasks();
+  $("dueAlerts").innerHTML = list.length
+    ? `<div class="alert alert-${list.some((t) => hoursLeft(t) < 0) ? "danger" : "warning"}">
+        <i class="bi bi-clock me-1"></i> ${list.map((t) => `${esc(t.title)} (${fmtLeft(hoursLeft(t))})`).join(" · ")}
+       </div>`
+    : "";
 };
 
-const notificationBtn = $("notificationBtn");
-const notificationPanel = $("notificationPanel");
-notificationBtn.addEventListener("click", () => {
-  const willOpen = notificationPanel.hidden;
-  notificationPanel.hidden = !willOpen;
-  notificationBtn.setAttribute("aria-expanded", String(willOpen));
-});
-document.addEventListener("click", (event) => {
-  if (!event.target.closest(".notification-wrap")) {
-    notificationPanel.hidden = true;
-    notificationBtn.setAttribute("aria-expanded", "false");
-  }
-});
-$("notificationList").addEventListener("click", (event) => {
-  const item = event.target.closest("[data-notification-task]");
-  if (!item) return;
-  const task = tasks.find((t) => Number(t.id) === Number(item.dataset.notificationTask));
-  if (!task) return;
-  notificationPanel.hidden = true;
-  notificationBtn.setAttribute("aria-expanded", "false");
-  location.hash = "tasks";
-  openTaskEditor(task);
-});
+const showPopup = (t) => {
+  const h = hoursLeft(t);
+  const [icon, color] = h < 0 ? ["bi-exclamation-octagon", "danger"] : h < 24 ? ["bi-exclamation-triangle", "danger"] : ["bi-clock", "warning"];
+  const el = document.createElement("div");
+  el.className = `toast border-0 text-bg-${color}`;
+  el.setAttribute("role", "alert");
+  el.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body"><strong><i class="bi ${icon} me-1"></i>${fmtLeft(h)}</strong><br>${esc(t.title)}</div>
+      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>`;
+  $("toastBox").appendChild(el);
+  el.addEventListener("hidden.bs.toast", () => el.remove());
+  new bootstrap.Toast(el, { delay: 10000 }).show();
 
-/* Keep the notification count current without interrupting the user. */
-setInterval(renderNotifications, 60000);
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification(fmtLeft(h), { body: t.title, tag: `task-${t.id}` });
+  }
+};
+
+const deadlinePopups = () => {
+  urgentTasks().forEach((t, i) => {
+    alerted.add(t.id);
+    setTimeout(() => showPopup(t), i * 600);
+  });
+};
+
+setInterval(() => {
+  checkDueSoon();
+  renderUpcoming();
+  urgentTasks().filter((t) => hoursLeft(t) <= 1 && !alerted.has(t.id))
+    .forEach((t) => { alerted.add(t.id); showPopup(t); });
+}, 60000);
+
+const updateNotifyStatus = () => {
+  $("notifyStatus").textContent = !("Notification" in window) ? "Not supported in this browser."
+    : Notification.permission === "granted" ? "Enabled."
+    : Notification.permission === "denied" ? "Blocked. Allow notifications in your browser's site settings."
+    : "Not enabled yet.";
+};
+
+$("notifyBtn").addEventListener("click", async () => {
+  if (!("Notification" in window)) return notify("Notifications are not supported here.", "danger");
+  const permission = await Notification.requestPermission();
+  notify(permission === "granted" ? "Reminders enabled." : "Notifications are blocked.",
+         permission === "granted" ? "success" : "warning");
+  updateNotifyStatus();
+  checkDueSoon();
+});
 
 /* ---------- load tasks ---------- */
 const loadTasks = async () => {
@@ -422,9 +417,13 @@ const loadTasks = async () => {
   tasks = result.tasks;
   render();
   renderUpcoming();
-  renderNotifications();
+  checkDueSoon();
   if (currentView() === "calendar") renderCalendar();
   if (currentView() === "insights") renderInsights();
+  if (firstLoad) {
+    firstLoad = false;
+    deadlinePopups();
+  }
 };
 
 /* ---------- create / edit / complete / delete ---------- */
@@ -450,47 +449,34 @@ $("taskForm").addEventListener("submit", async (e) => {
 const editModal = new bootstrap.Modal($("editModal"));
 
 $("taskBody").addEventListener("click", async (e) => {
-  const actionButton = e.target.closest('[data-action="toggle"], [data-action="retry"]');
-  if (actionButton) {
-    e.stopPropagation();
-    const task = tasks.find((t) => Number(t.id) === Number(actionButton.dataset.id));
-    if (!task) return;
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  const id = Number(btn.dataset.id);
+  const task = tasks.find((t) => t.id == id);
+  if (!task) return;
 
-    // Pending tasks use the checkbox to complete them.
-    // Completed tasks show Retry, which only returns them to Pending.
-    const isRetry = actionButton.dataset.action === "retry";
-    const nextStatus = isRetry ? "pending" : "completed";
-    const result = await request("PUT", { ...task, status: nextStatus });
-    notify(result.message || (isRetry ? "Task moved back to Pending." : "Task marked as completed."),
-      result.success ? "success" : "danger");
-    if (result.success) await loadTasks();
+  if (btn.dataset.action === "edit") {
+    $("edit_id").value = task.id;
+    $("edit_title").value = task.title;
+    $("edit_category").value = task.category ?? "";
+    $("edit_priority").value = task.priority;
+    $("edit_status").value = task.status;
+    $("edit_due_date").value = task.due_date ?? "";
+    $("edit_due_time").value = (task.due_time ?? "").slice(0, 5);
+    $("edit_description").value = task.description ?? "";
+    editModal.show();
     return;
   }
-
-  const card = e.target.closest("[data-task-card]");
-  if (!card) return;
-  const task = tasks.find((t) => Number(t.id) === Number(card.dataset.taskCard));
-  openTaskEditor(task);
-});
-
-$("taskBody").addEventListener("keydown", (e) => {
-  if (e.target.closest("button")) return;
-  if (e.key !== "Enter" && e.key !== " ") return;
-  const card = e.target.closest("[data-task-card]");
-  if (!card) return;
-  e.preventDefault();
-  openTaskEditor(tasks.find((t) => Number(t.id) === Number(card.dataset.taskCard)));
-});
-
-$("editDeleteBtn").addEventListener("click", async () => {
-  const id = Number($("edit_id").value);
-  if (!id || !confirm("Delete this task? This action cannot be undone.")) return;
-  const result = await request("DELETE", { id });
-  notify(result.message, result.success ? "success" : "danger");
-  if (result.success) {
-    editModal.hide();
-    await loadTasks();
+  if (btn.dataset.action === "toggle") {
+    const result = await request("PUT", { ...task, status: task.status === "completed" ? "pending" : "completed" });
+    notify(result.message, result.success ? "success" : "danger");
   }
+  if (btn.dataset.action === "delete") {
+    if (!confirm("Delete this task?")) return;
+    const result = await request("DELETE", { id });
+    notify(result.message, result.success ? "success" : "danger");
+  }
+  loadTasks();
 });
 
 $("editForm").addEventListener("submit", async (e) => {
@@ -500,6 +486,7 @@ $("editForm").addEventListener("submit", async (e) => {
     title: $("edit_title").value,
     category: $("edit_category").value,
     priority: $("edit_priority").value,
+    status: $("edit_status").value,
     due_date: $("edit_due_date").value,
     due_time: $("edit_due_time").value,
     description: $("edit_description").value,
@@ -509,16 +496,6 @@ $("editForm").addEventListener("submit", async (e) => {
     editModal.hide();
     loadTasks();
   }
-});
-
-document.querySelectorAll("[data-category-target]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const input = $(button.dataset.categoryTarget);
-    if (input) {
-      input.value = button.dataset.category;
-      input.focus();
-    }
-  });
 });
 
 /* ---------- search and filter ---------- */
@@ -580,6 +557,7 @@ $("setTheme").addEventListener("change", (e) => {
 });
 $("setLead").addEventListener("change", (e) => {
   localStorage.setItem("leadHours", e.target.value);
+  checkDueSoon();
   notify("Reminder window saved.");
 });
 
@@ -609,6 +587,7 @@ const loadGoogle = async () => {
 /* ---------- start ---------- */
 applyTheme(localStorage.getItem("theme") || "dark");
 $("setLead").value = String(getLead());
+updateNotifyStatus();
 showView(currentView());
 loadTasks();
    loadGoogle(); 
