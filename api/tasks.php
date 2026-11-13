@@ -26,13 +26,15 @@ $data = json_decode(file_get_contents("php://input"), true);
 // Shared cleaning for create and update
 $clean = function ($data) {
     $time = trim($data["due_time"] ?? "");
+    $d = trim($data["due_date"] ?? "");
+    $d = (preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && checkdate((int)substr($d, 5, 2), (int)substr($d, 8, 2), (int)substr($d, 0, 4))) ? $d : null;
     return [
         "title" => trim($data["title"] ?? ""),
         "desc"  => trim($data["description"] ?? ""),
         "cat"   => trim($data["category"] ?? ""),
         "pri"   => in_array($data["priority"] ?? "", ["low", "medium", "high"]) ? $data["priority"] : "medium",
-        "due"   => ($data["due_date"] ?? "") !== "" ? $data["due_date"] : null,
-        "time"  => preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $time) ? $time : null,
+        "due"   => $d,
+        "time"  => ($d && preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $time)) ? $time : null,
     ];
 };
 
@@ -55,6 +57,10 @@ if ($method === "POST") {
 if ($method === "PUT") {
     $t = $clean($data);
     $id = (int)($data["id"] ?? 0);
+    if ($id <= 0) {
+        echo json_encode(["success" => false, "message" => "Invalid task."]);
+        exit;
+    }
     if ($t["title"] === "") {
         echo json_encode(["success" => false, "message" => "Title is required."]);
         exit;

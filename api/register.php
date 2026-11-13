@@ -4,7 +4,7 @@ require "../config/db.php";
 
 $data = json_decode(file_get_contents("php://input"), true);
 $name  = trim($data["full_name"] ?? "");
-$email = trim($data["email"] ?? "");
+$email = strtolower(trim($data["email"] ?? ""));
 $pass  = $data["password"] ?? "";
 
 if ($name === "" || $email === "" || $pass === "") {
@@ -15,8 +15,12 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     echo json_encode(["success" => false, "message" => "Invalid email address."]);
     exit;
 }
-if (strlen($pass) < 8) {
-    echo json_encode(["success" => false, "message" => "Password must be at least 8 characters."]);
+if (!preg_match('/^[a-z0-9._%+\-]+@gmail\.com$/', $email)) {
+    echo json_encode(["success" => false, "message" => "Please use a Gmail address (name@gmail.com)."]);
+    exit;
+}
+if (strlen($pass) < 8 || !preg_match('/[A-Z]/', $pass) || !preg_match('/[a-z]/', $pass) || !preg_match('/\d/', $pass)) {
+    echo json_encode(["success" => false, "message" => "Password needs 8+ characters with an uppercase letter, a lowercase letter and a number."]);
     exit;
 }
 

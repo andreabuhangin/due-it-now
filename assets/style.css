@@ -283,3 +283,38 @@ button.cal-cell:hover { background: var(--surface-2); }
   .stats-4, .insight-grid, .chart-grid, .cal-layout { grid-template-columns: 1fr; }
   .stats-4 { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ---------- Password toggle, validation hints ---------- */
+.pw-toggle { border-radius: 0 10px 10px 0; padding: .375rem .8rem; }
+.input-group > .form-control { border-radius: 10px 0 0 10px; }
+.field-hint { font-size: .8rem; color: var(--muted); margin-top: .35rem; }
+.field-hint.is-ok { color: var(--low-fg); }
+.field-hint.is-bad { color: var(--high-fg); }
+.pw-rules { list-style: none; padding: 0; margin: .6rem 0 0; font-size: .8rem; color: var(--muted); }
+.pw-rules li::before { content: "\25CB"; margin-right: .5rem; }
+.pw-rules li.is-ok { color: var(--low-fg); }
+.pw-rules li.is-ok::before { content: "\2713"; }
+
+/* ---------- Topbar, notifications ---------- */
+.topbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.notif-wrap { position: relative; }
+.notif-count {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-left: .5rem; padding: 0 .35rem;
+  border-radius: 999px; background: var(--dot-high); color: #fff; font-size: .72rem; font-weight: 700;
+}
+.notif-panel {
+  position: absolute; top: calc(100% + .5rem); left: 0; z-index: 50; width: 340px; max-width: 90vw; max-height: 380px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 32px rgba(0, 0, 0, .3); padding: .4rem;
+}
+.notif-panel[hidden] { display: none; }
+.notif-item { display: flex; gap: .7rem; align-items: flex-start; padding: .65rem .7rem; border-radius: 12px; }
+.notif-item:hover { background: var(--surface-2); }
+.notif-item .dot { margin-top: .4rem; }
+.notif-title { font-weight: 600; font-size: .9rem; }
+.notif-sub { color: var(--muted); font-size: .8rem; }
+
+/* ---------- Task cards ---------- */
+.task-check { width: 1.25rem; height: 1.25rem; margin: 0; flex: none; cursor: pointer; border-color: var(--line); background-color: var(--surface-2); }
+.task-check:checked { background-color: var(--dot-done); border-color: var(--dot-done); }
+.task.is-late { border-color: var(--dot-high); }
+.empty .btn { margin-top: .5rem; }

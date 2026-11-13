@@ -21,7 +21,7 @@ const hoursLeft = (t) => (deadline(t) - new Date()) / 36e5;
 const dayDiff = (t) => Math.round((new Date(`${t.due_date}T00:00:00`) - startOfToday()) / 864e5);
 const isOverdue = (t) => t.status === "pending" && t.due_date && hoursLeft(t) < 0;
 const currentView = () => location.hash.slice(1) || "overview";
-const getLead = () => Number(localStorage.getItem("leadHours")) || 48;
+const getLead = () => { try { return Number(localStorage.getItem("leadHours")) || 48; } catch { return 48; } };
 const initialsOf = (name) => {
   const p = name.trim().split(/\s+/);
   return ((p[0]?.[0] || "") + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase();
@@ -91,11 +91,11 @@ $("setTheme")?.addEventListener("change", (e) => {
 });
 applyTheme(getPref("theme") || "dark");
 
-
 /* ---------- views (sidebar pages) ---------- */
 const VIEWS = ["overview", "add", "tasks", "insights", "calendar", "profile", "settings"];
 
 const showView = (name) => {
+  if (name === "add") name = "tasks";
   if (!VIEWS.includes(name)) name = "overview";
   document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${name}`));
   document.querySelectorAll("[data-view]").forEach((a) => a.classList.toggle("active", a.dataset.view === name));
@@ -116,24 +116,29 @@ const render = () => {
     `${title} ${category} ${description}`.toLowerCase().includes(term));
 
   $("taskBody").innerHTML = visible.length
-    ? visible.map(({ id, title, category, description, priority, due_date, due_time, status: st }) => `
-      <div class="task ${st === "completed" ? "is-done" : ""}">
-        <span class="dot dot-${st === "completed" ? "done" : esc(priority)}"></span>
+    ? visible.map((t) => {
+      const done = t.status === "completed";
+      const late = isOverdue(t);
+      return `
+      <div class="task ${done ? "is-done" : ""} ${late ? "is-late" : ""}">
+        <input type="checkbox" class="form-check-input task-check" data-action="toggle" data-id="${t.id}" ${done ? "checked" : ""} aria-label="Mark ${esc(t.title)} as ${done ? "pending" : "done"}">
+        <span class="dot dot-${done ? "done" : esc(t.priority)}"></span>
         <div class="task-main">
-          <div class="task-title">${esc(title)}</div>
-          <div class="task-sub">${esc([category, description].filter(Boolean).join(" · ") || "No details")}</div>
+          <div class="task-title">${esc(t.title)}</div>
+          <div class="task-sub">${esc([t.category, t.description].filter(Boolean).join(" · ") || "No details")}</div>
         </div>
         <div class="task-meta">
-          <span class="pill pill-${esc(priority)}">${esc(priority)}</span>
-          <span class="pill pill-${esc(st)}">${esc(st)}</span>
-          <span class="pill pill-due"><i class="bi bi-clock me-1"></i>${esc(fmtDue(due_date, due_time))}</span>
+          <span class="pill pill-${esc(t.priority)}">${esc(t.priority)}</span>
+          <span class="pill pill-${esc(t.status)}">${esc(t.status)}</span>
+          ${late ? '<span class="pill pill-high">overdue</span>' : ""}
+          <span class="pill pill-due"><i class="bi bi-clock me-1"></i>${esc(fmtDue(t.due_date, t.due_time))}</span>
           <span class="task-actions">
-            <button class="btn btn-icon" data-action="edit" data-id="${id}" title="Edit"><i class="bi bi-pencil"></i></button>
-            <button class="btn btn-icon" data-action="toggle" data-id="${id}" title="${st === "completed" ? "Mark pending" : "Mark done"}"><i class="bi ${st === "completed" ? "bi-arrow-counterclockwise" : "bi-check2"}"></i></button>
-            <button class="btn btn-icon btn-icon-danger" data-action="delete" data-id="${id}" title="Delete"><i class="bi bi-trash"></i></button>
+            <button class="btn btn-icon" data-action="edit" data-id="${t.id}" title="Edit"><i class="bi bi-pencil"></i></button>
+            <button class="btn btn-icon btn-icon-danger" data-action="delete" data-id="${t.id}" title="Delete"><i class="bi bi-trash"></i></button>
           </span>
         </div>
-      </div>`).join("")
+      </div>`;
+    }).join("")
     : `<div class="empty"><i class="bi bi-inbox"></i><p>No tasks found.</p></div>`;
 
   const done = tasks.filter((t) => t.status === "completed").length;
@@ -374,8 +379,25 @@ const urgentTasks = () =>
   tasks.filter((t) => t.status === "pending" && t.due_date && hoursLeft(t) <= getLead())
        .sort((a, b) => hoursLeft(a) - hoursLeft(b));
 
+const renderNotifs = (list) => {
+  const n = list.length;
+  $("notifCount").textContent = n;
+  $("notifCount").hidden = n === 0;
+  $("notifPanel").innerHTML = n
+    ? list.map((t) => `
+      <div class="notif-item">
+        <i class="dot dot-${esc(t.priority)}"></i>
+        <div><div class="notif-title">${esc(t.title)}</div>
+        <div class="notif-sub">${esc(fmtLeft(hoursLeft(t)))} · ${esc(fmtDue(t.due_date, t.due_time))}</div></div>
+      </div>`).join("")
+    : `<div class="up-empty p-3">You're all caught up.</div>`;
+};
+$("notifToggle").addEventListener("click", (e) => { e.stopPropagation(); $("notifPanel").hidden = !$("notifPanel").hidden; });
+document.addEventListener("click", (e) => { if (!e.target.closest(".notif-wrap")) $("notifPanel").hidden = true; });
+
 const checkDueSoon = () => {
   const list = urgentTasks();
+  renderNotifs(list);
   $("dueAlerts").innerHTML = list.length
     ? `<div class="alert alert-${list.some((t) => hoursLeft(t) < 0) ? "danger" : "warning"}">
         <i class="bi bi-clock me-1"></i> ${list.map((t) => `${esc(t.title)} (${fmtLeft(hoursLeft(t))})`).join(" · ")}
@@ -434,9 +456,13 @@ $("notifyBtn").addEventListener("click", async () => {
 });
 
 /* ---------- load tasks ---------- */
+const showLoadError = (msg) => {
+  $("taskBody").innerHTML = `<div class="empty"><i class="bi bi-wifi-off"></i><p>${esc(msg || "Could not load your tasks.")}</p>
+    <button type="button" class="btn btn-soft" data-action="retry"><i class="bi bi-arrow-repeat me-1"></i>Retry</button></div>`;
+};
 const loadTasks = async () => {
   const result = await request("GET");
-  if (!result.success) return notify(result.message, "danger");
+  if (!result.success) return showLoadError(result.message);
   tasks = result.tasks;
   render();
   renderUpcoming();
@@ -473,8 +499,9 @@ let _editModal;
 const editModal = { show: () => (_editModal ||= new bootstrap.Modal($("editModal"))).show(), hide: () => _editModal?.hide() };
 
 $("taskBody").addEventListener("click", async (e) => {
-  const btn = e.target.closest("button");
+  const btn = e.target.closest("[data-action]");
   if (!btn) return;
+  if (btn.dataset.action === "retry") return loadTasks();
   const id = Number(btn.dataset.id);
   const task = tasks.find((t) => t.id == id);
   if (!task) return;
@@ -562,7 +589,7 @@ $("passForm").addEventListener("submit", async (e) => {
 });
 
 $("setLead").addEventListener("change", (e) => {
-  localStorage.setItem("leadHours", e.target.value);
+  setPref("leadHours", e.target.value);
   checkDueSoon();
   notify("Reminder window saved.");
 });
@@ -595,4 +622,4 @@ $("setLead").value = String(getLead());
 updateNotifyStatus();
 showView(currentView());
 loadTasks();
-   loadGoogle().catch(() => {});
+loadGoogle().catch(() => {});

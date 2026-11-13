@@ -7,6 +7,15 @@ $data  = json_decode(file_get_contents("php://input"), true);
 $email = trim($data["email"] ?? "");
 $pass  = $data["password"] ?? "";
 
+if ($email === "" || $pass === "") {
+    echo json_encode(["success" => false, "message" => "Enter your email and password."]);
+    exit;
+}
+if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    echo json_encode(["success" => false, "message" => "Enter a valid email address."]);
+    exit;
+}
+
 $stmt = $conn->prepare("SELECT id, full_name, password_hash, role FROM users WHERE email = ?");
 $stmt->bind_param("s", $email);
 $stmt->execute();
