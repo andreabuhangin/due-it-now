@@ -69,6 +69,29 @@ const call = async (url, method = "GET", body) => {
 };
 const request = (method, body) => call(API, method, body);
 
+/* ---------- theme (runs first so later errors can't break it) ---------- */
+const themeBtn = $("themeToggle");
+const getPref = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const applyTheme = (theme) => {
+  document.documentElement.setAttribute("data-bs-theme", theme);
+  if (themeBtn) themeBtn.innerHTML = theme === "dark" ? '<i class="bi bi-sun"></i>' : '<i class="bi bi-moon"></i>';
+  const sel = $("setTheme");
+  if (sel) sel.value = theme;
+  if (currentView() === "insights") setTimeout(() => { try { renderInsights(); } catch {} }, 0);
+};
+themeBtn?.addEventListener("click", () => {
+  const next = document.documentElement.getAttribute("data-bs-theme") === "dark" ? "light" : "dark";
+  setPref("theme", next);
+  applyTheme(next);
+});
+$("setTheme")?.addEventListener("change", (e) => {
+  setPref("theme", e.target.value);
+  applyTheme(e.target.value);
+});
+applyTheme(getPref("theme") || "dark");
+
+
 /* ---------- views (sidebar pages) ---------- */
 const VIEWS = ["overview", "add", "tasks", "insights", "calendar", "profile", "settings"];
 
@@ -446,7 +469,8 @@ $("taskForm").addEventListener("submit", async (e) => {
   }
 });
 
-const editModal = new bootstrap.Modal($("editModal"));
+let _editModal;
+const editModal = { show: () => (_editModal ||= new bootstrap.Modal($("editModal"))).show(), hide: () => _editModal?.hide() };
 
 $("taskBody").addEventListener("click", async (e) => {
   const btn = e.target.closest("button");
@@ -537,24 +561,6 @@ $("passForm").addEventListener("submit", async (e) => {
   if (r.success) e.target.reset();
 });
 
-/* ---------- theme and settings ---------- */
-const themeBtn = $("themeToggle");
-const applyTheme = (theme) => {
-  document.documentElement.setAttribute("data-bs-theme", theme);
-  themeBtn.innerHTML = theme === "dark" ? '<i class="bi bi-sun"></i>' : '<i class="bi bi-moon"></i>';
-  $("setTheme").value = theme;
-  if (currentView() === "insights") renderInsights();
-};
-
-themeBtn.addEventListener("click", () => {
-  const next = document.documentElement.getAttribute("data-bs-theme") === "dark" ? "light" : "dark";
-  localStorage.setItem("theme", next);
-  applyTheme(next);
-});
-$("setTheme").addEventListener("change", (e) => {
-  localStorage.setItem("theme", e.target.value);
-  applyTheme(e.target.value);
-});
 $("setLead").addEventListener("change", (e) => {
   localStorage.setItem("leadHours", e.target.value);
   checkDueSoon();
@@ -585,9 +591,8 @@ const loadGoogle = async () => {
   });
 };
 /* ---------- start ---------- */
-applyTheme(localStorage.getItem("theme") || "dark");
 $("setLead").value = String(getLead());
 updateNotifyStatus();
 showView(currentView());
 loadTasks();
-   loadGoogle(); 
+   loadGoogle().catch(() => {});
