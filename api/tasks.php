@@ -39,6 +39,13 @@ $clean = function ($data) {
 // CREATE
 if ($method === "POST") {
     $t = $clean($data);
+    if ($t["due"] !== null) {
+        $date = DateTime::createFromFormat("!Y-m-d", $t["due"]);
+        if (!$date || $date->format("Y-m-d") !== $t["due"]) {
+            echo json_encode(["success" => false, "message" => "Please provide a valid due date."]);
+            exit;
+        }
+    }
     if ($t["title"] === "") {
         echo json_encode(["success" => false, "message" => "Title is required."]);
         exit;
@@ -55,15 +62,36 @@ if ($method === "POST") {
 if ($method === "PUT") {
     $t = $clean($data);
     $id = (int)($data["id"] ?? 0);
-    if ($t["title"] === "") {
-        echo json_encode(["success" => false, "message" => "Title is required."]);
+    if ($t["due"] !== null) {
+        $date = DateTime::createFromFormat("!Y-m-d", $t["due"]);
+        if (!$date || $date->format("Y-m-d") !== $t["due"]) {
+            echo json_encode(["success" => false, "message" => "Please provide a valid due date."]);
+            exit;
+        }
+    }
+    if ($id <= 0 || $t["title"] === "") {
+        echo json_encode(["success" => false, "message" => "A valid task and title are required."]);
         exit;
     }
-    $st = ($data["status"] ?? "") === "completed" ? "completed" : "pending";
+
+    // Editing task details must preserve its current completion status.
+    $current = $conn->prepare("SELECT status FROM tasks WHERE id = ? AND user_id = ?");
+    $current->bind_param("ii", $id, $uid);
+    $current->execute();
+    $existing = $current->get_result()->fetch_assoc();
+    if (!$existing) {
+        http_response_code(404);
+        echo json_encode(["success" => false, "message" => "Task not found."]);
+        exit;
+    }
+    $st = array_key_exists("status", $data)
+        ? (($data["status"] ?? "") === "completed" ? "completed" : "pending")
+        : $existing["status"];
+
     $stmt = $conn->prepare("UPDATE tasks SET title=?, description=?, category=?, priority=?, due_date=?, due_time=?, status=?, completed_at = IF(?='completed', COALESCE(completed_at, NOW()), NULL) WHERE id=? AND user_id=?");
-$stmt->bind_param("ssssssssii", $t["title"], $t["desc"], $t["cat"], $t["pri"], $t["due"], $t["time"], $st, $st, $id, $uid);
+    $stmt->bind_param("ssssssssii", $t["title"], $t["desc"], $t["cat"], $t["pri"], $t["due"], $t["time"], $st, $st, $id, $uid);
     $stmt->execute();
-       g_sync_task($conn, $uid, $id, $t, $st);
+    g_sync_task($conn, $uid, $id, $t, $st);
     echo json_encode(["success" => true, "message" => "Task updated."]);
     exit;
 }

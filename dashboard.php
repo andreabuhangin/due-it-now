@@ -29,7 +29,6 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
     <div class="brand"><img src="assets/logo.png" alt="" width="28" height="28" style="border-radius:8px; margin-right:8px;">Due It Now</div>
     <nav class="side-nav" aria-label="Main">
       <a href="#overview" data-view="overview"><i class="bi bi-house"></i>Overview</a>
-      <a href="#add" data-view="add"><i class="bi bi-plus-circle"></i>Add task</a>
       <a href="#tasks" data-view="tasks"><i class="bi bi-check2-square"></i>My tasks</a>
       <a href="#calendar" data-view="calendar"><i class="bi bi-calendar3"></i>Calendar</a>
       <a href="#insights" data-view="insights"><i class="bi bi-bar-chart"></i>Insights</a>
@@ -56,12 +55,20 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
         <label for="search" class="visually-hidden">Search tasks</label>
         <input type="search" id="search" placeholder="Search tasks...">
       </div>
+      <div class="notification-wrap">
+        <button type="button" id="notificationBtn" class="btn btn-soft notification-btn" aria-expanded="false" aria-controls="notificationPanel">
+          <i class="bi bi-bell"></i><span class="notification-label">Notifications</span><span id="overdueBadge" class="notification-badge" hidden>0</span>
+        </button>
+        <div id="notificationPanel" class="notification-panel" hidden>
+          <div class="notification-panel-head"><strong>Overdue tasks</strong><span id="notificationCountLabel" class="stat-sub">0 tasks</span></div>
+          <div id="notificationList"></div>
+        </div>
+      </div>
     </header>
 
     <!-- OVERVIEW -->
     <section id="view-overview" class="view">
       <div class="page-head"><div><h1>Overview</h1><p>Stay on top of your deadlines.</p></div></div>
-      <div id="dueAlerts"></div>
       <div class="stats stats-4" aria-label="Progress summary">
         <div class="stat"><span class="stat-label">Pending</span><span class="stat-num" id="countPending">0</span><span class="stat-sub"><i class="dot dot-medium"></i>still to do</span></div>
         <div class="stat"><span class="stat-label">Completed</span><span class="stat-num" id="countDone">0</span><span class="stat-sub"><i class="dot dot-done"></i>finished</span></div>
@@ -74,10 +81,22 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
       </div>
     </section>
 
-    <!-- ADD TASK -->
-    <section id="view-add" class="view" hidden>
-      <div class="page-head"><div><h1>Add task</h1><p>Create a new assignment, project, exam or personal task.</p></div></div>
-      <div class="panel">
+    <!-- MY TASKS -->
+    <section id="view-tasks" class="view" hidden>
+      <div class="page-head">
+        <div><h1>My tasks</h1><p>Search, edit, complete or delete your tasks.</p></div>
+        <div>
+          <label for="statusFilter" class="visually-hidden">Filter by status</label>
+          <select id="statusFilter" class="form-select pill-select">
+            <option value="all">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="overdue">Overdue</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
+      </div>
+      <div class="panel add-task-panel">
+        <h2 class="panel-title">Add a new task</h2>
         <form id="taskForm" class="row g-2">
           <div class="col-md-4">
             <label for="title" class="form-label">Title</label>
@@ -85,20 +104,18 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
           </div>
           <div class="col-md-2">
             <label for="category" class="form-label">Category</label>
-            <input type="text" id="category" class="form-control" list="categoryList" placeholder="e.g. Assignment">
-            <datalist id="categoryList">
-              <option value="Assignment"></option>
-              <option value="Project"></option>
-              <option value="Exam"></option>
-              <option value="Personal"></option>
-            </datalist>
+            <input type="text" id="category" class="form-control" placeholder="Choose or type a category">
+            <div class="category-options" aria-label="Suggested categories">
+              <button type="button" class="chip" data-category-target="category" data-category="Assignment">Assignment</button>
+              <button type="button" class="chip" data-category-target="category" data-category="Project">Project</button>
+              <button type="button" class="chip" data-category-target="category" data-category="Exam">Exam</button>
+              <button type="button" class="chip" data-category-target="category" data-category="Personal">Personal</button>
+            </div>
           </div>
           <div class="col-md-2">
             <label for="priority" class="form-label">Priority</label>
             <select id="priority" class="form-select">
-              <option value="low">Low</option>
-              <option value="medium" selected>Medium</option>
-              <option value="high">High</option>
+              <option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option>
             </select>
           </div>
           <div class="col-md-2">
@@ -115,21 +132,6 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
           </div>
           <div class="col-12"><button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Add task</button></div>
         </form>
-      </div>
-    </section>
-
-    <!-- MY TASKS -->
-    <section id="view-tasks" class="view" hidden>
-      <div class="page-head">
-        <div><h1>My tasks</h1><p>Search, edit, complete or delete your tasks.</p></div>
-        <div>
-          <label for="statusFilter" class="visually-hidden">Filter by status</label>
-          <select id="statusFilter" class="form-select pill-select">
-            <option value="all">All statuses</option>
-            <option value="pending">Pending</option>
-            <option value="completed">Completed</option>
-          </select>
-        </div>
       </div>
       <div id="taskBody" class="task-list"></div>
     </section>
@@ -256,7 +258,7 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
           </select>
         </div>
         <div class="setting-row">
-          <div><strong>Remind me before a deadline</strong><div class="stat-sub">Tasks inside this window appear in alerts and pop-ups.</div></div>
+          <div><strong>Remind me before a deadline</strong><div class="stat-sub">Used for reminders in exported calendar events.</div></div>
           <select id="setLead" class="form-select pill-select">
             <option value="1">1 hour</option>
             <option value="3">3 hours</option>
@@ -265,10 +267,6 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
             <option value="48">2 days</option>
             <option value="72">3 days</option>
           </select>
-        </div>
-        <div class="setting-row">
-          <div><strong>Desktop notifications</strong><div class="stat-sub" id="notifyStatus"></div></div>
-          <button id="notifyBtn" class="btn btn-soft" type="button"><i class="bi bi-bell me-1"></i>Enable</button>
         </div>
         <div class="setting-row">
   <div><strong>Google Calendar</strong><div class="stat-sub" id="gStatus">Checking...</div></div>
@@ -296,22 +294,21 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
         <input type="text" id="edit_title" class="form-control mb-3" required>
 
         <label for="edit_category" class="form-label">Category</label>
-        <input type="text" id="edit_category" class="form-control mb-3" list="categoryList">
+        <input type="text" id="edit_category" class="form-control mb-2" placeholder="Choose or type a category">
+        <div class="category-options mb-3" aria-label="Suggested categories">
+          <button type="button" class="chip" data-category-target="edit_category" data-category="Assignment">Assignment</button>
+          <button type="button" class="chip" data-category-target="edit_category" data-category="Project">Project</button>
+          <button type="button" class="chip" data-category-target="edit_category" data-category="Exam">Exam</button>
+          <button type="button" class="chip" data-category-target="edit_category" data-category="Personal">Personal</button>
+        </div>
 
         <div class="row">
-          <div class="col-6">
+          <div class="col-12 col-md-6">
             <label for="edit_priority" class="form-label">Priority</label>
             <select id="edit_priority" class="form-select mb-3">
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
-            </select>
-          </div>
-          <div class="col-6">
-            <label for="edit_status" class="form-label">Status</label>
-            <select id="edit_status" class="form-select mb-3">
-              <option value="pending">Pending</option>
-              <option value="completed">Completed</option>
             </select>
           </div>
         </div>
@@ -330,9 +327,12 @@ $initials = strtoupper(mb_substr($parts[0], 0, 1) . (count($parts) > 1 ? mb_subs
         <label for="edit_description" class="form-label">Description</label>
         <textarea id="edit_description" class="form-control" rows="3"></textarea>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-soft" data-bs-dismiss="modal">Cancel</button>
-        <button type="submit" class="btn btn-primary">Save changes</button>
+      <div class="modal-footer justify-content-between">
+        <button type="button" class="btn btn-outline-danger" id="editDeleteBtn"><i class="bi bi-trash me-1"></i>Delete task</button>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-soft" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save changes</button>
+        </div>
       </div>
     </form>
   </div>
